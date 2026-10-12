@@ -17,8 +17,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: |
-          echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
-          echo "sdk.dir=$ANDROID_HOME" >> android/local.properties
+          printf 'flutter.sdk=%s\nsdk.dir=%s\n' "$FLUTTER_ROOT" "$ANDROID_HOME" > android/local.properties
           chmod +x android/gradlew
           cd android
           ./gradlew :app:testDebugUnitTest
