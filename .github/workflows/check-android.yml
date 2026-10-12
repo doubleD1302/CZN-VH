@@ -3,6 +3,8 @@ on: [push, pull_request]
 jobs:
   pc-tools:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

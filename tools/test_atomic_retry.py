@@ -79,7 +79,7 @@ class AtomicRetryTests(unittest.TestCase):
         with self.assertRaises(OSError) as raised:
             self.invoke(api, sleeper)
         self.assertEqual(raised.exception.winerror, 1175)
-        self.assertEqual(raised.exception.filename, str(self.target.resolve()))
+        self.assertEqual(Path(raised.exception.filename).resolve(), self.target.resolve())
         self.assertIn(self.target.name, str(raised.exception))
         self.assertEqual(api.ReplaceFileW.call_count, 8)
         self.assertEqual(len(set(self.paths)), 1)
@@ -105,7 +105,7 @@ class AtomicRetryTests(unittest.TestCase):
         with self.assertRaises(OSError) as raised:
             self.invoke(api, sleeper)
         self.assertEqual(raised.exception.winerror, 5)
-        self.assertEqual(raised.exception.filename, str(self.target.resolve()))
+        self.assertEqual(Path(raised.exception.filename).resolve(), self.target.resolve())
         self.assertIn(self.target.name, str(raised.exception))
         self.assertEqual(api.ReplaceFileW.call_count, 1)
         sleeper.assert_not_called()
