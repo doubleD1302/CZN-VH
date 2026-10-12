@@ -3,7 +3,7 @@ Credential Manager tokens stay in memory; private signing material never leaves 
 """
 import argparse,hashlib,json,os,subprocess,urllib.request,urllib.error
 from pathlib import Path
-P=Path(__file__).resolve().parents[1];APP=P/'czn_android_patcher'
+P=Path(__file__).resolve().parents[1];APP=P/'czn_android_patcher' if (P/'czn_android_patcher').is_dir() else P
 
 def digest(f):
  h=hashlib.sha256()
@@ -24,7 +24,7 @@ def api(token,url,method='GET',body=None,binary=False):
   else:data=json.dumps(body,ensure_ascii=False).encode('utf-8');headers['Content-Type']='application/json'
  with urllib.request.urlopen(urllib.request.Request(url,headers=headers,method=method,data=data),timeout=120) as response:return json.load(response)
 def main():
- a=argparse.ArgumentParser();a.add_argument('--directory',type=Path,default=P/'data/releases/android-v1.4.0');a.add_argument('--version',default='1.4.0');a.add_argument('--code',type=int,default=10400);a.add_argument('--apk',type=Path);a.add_argument('--publish',action='store_true');args=a.parse_args();out=args.directory
+ a=argparse.ArgumentParser();a.add_argument('--directory',type=Path,default=P/'data/releases/android-v1.4.0');a.add_argument('--version',default='1.4.0');a.add_argument('--code',type=int,default=10400);a.add_argument('--apk',type=Path);a.add_argument('--publish',action='store_true');a.add_argument('--notice',type=Path);a.add_argument('--pc-exe',type=Path);args=a.parse_args();out=args.directory
  apk=args.apk or out/f'CZN_VietHoa_Android_v{args.version}.apk';bundle=out/f'CZN_Android_v{args.version}.cznpatch';tag='android-v'+args.version;url=f'https://github.com/doubleD1302/CZN-VH/releases/download/{tag}/'
  import re
  sdk_props=(APP/'android/local.properties').read_text('utf-8-sig')
@@ -36,9 +36,14 @@ def main():
  if not match or match.group(1)!='vn.czn.viethoa.community':raise RuntimeError('APK identity is not the community app')
  app_code=int(match.group(2));app_version=match.group(3)
  channel=dict(schema=1,type='channel',patch_version=args.version,patch_code=args.code,patch_url=url+bundle.name,patch_size=bundle.stat().st_size,patch_sha256=digest(bundle),app_version=app_version,app_code=app_code,app_url=url+apk.name,app_size=apk.stat().st_size,app_sha256=digest(apk),changelog='Bản cộng đồng: cài qua Shizuku, backup/rollback, cập nhật có chữ ký và bản dịch JP đi kèm.')
+ if args.notice:
+  channel['notice']=json.loads(args.notice.read_text('utf-8'))
  raw=out/'channel.descriptor.json';raw.write_text(json.dumps(channel,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
  subprocess.run(['pwsh','-NoProfile','-File',str(P/'tools/sign_android_metadata.ps1'),'-InputFile',str(raw),'-KeyFile',str(APP/'.signing/update-private.pk8'),'-OutputFile',str(out/'channel.json')],check=True)
  assets=[apk,bundle,out/'channel.json',out/'HUONG_DAN_ANDROID.txt']
+ if args.pc_exe:
+  if args.pc_exe.suffix.lower()!='.exe':raise ValueError('Only the PC executable may be added')
+  assets.append(args.pc_exe)
  sums=out/'SHA256SUMS.txt';sums.write_text(''.join(digest(f)+'  '+f.name+'\n' for f in assets),encoding='utf-8');assets.append(sums)
  if not args.publish:print(json.dumps({'prepared':True,'assets':[f.name for f in assets],'tag':tag}));return
  # Require actual check results and a new release; never overwrite remote assets.

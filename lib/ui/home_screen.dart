@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../services/native_bridge.dart';
+import '../services/notice_policy.dart';
 import '../services/patch_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -22,6 +23,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _busy = false, _checking = false, _downloading = false;
   String _message = 'Đang chuẩn bị ứng dụng…', _onlineMessage = '';
   double _progress = 0;
+  bool _refreshPending = false, _noticeOpen = false, _noticeRequested = true;
+  String? _noticeShown;
   @override
   void initState() {
     super.initState();
@@ -37,8 +40,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && !_busy && !_checking) {
-      _refresh();
+    if (state == AppLifecycleState.paused) {
+      _noticeRequested = true;
+      _noticeShown = null;
+    }
+    if (state == AppLifecycleState.resumed && !_busy) {
+      if (_checking) {
+        _refreshPending = true;
+      } else {
+        _refresh();
+      }
     }
   }
 
@@ -54,13 +65,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _bundled = bundle;
         _message = 'Sẵn sàng';
       });
-      if (status['accessGranted'] == true && status['package'] != null) {
-        final game = await NativeBridge.map('scanGame');
-        if (mounted) setState(() => _game = game);
-        final freshStatus = await NativeBridge.map('status');
-        if (mounted) {
-          setState(() => _status = freshStatus);
+      try {
+        final cache = await NativeBridge.map('cachedChannel');
+        if (cache.containsKey('patch_code') && mounted) {
+          setState(() => _remote = ReleaseInfo.channel(cache));
+          _maybeNotice();
         }
+      } catch (_) {}
+      _maybeNotice();
+      if (status['accessGranted'] == true && status['package'] != null) {
+        try {
+          final game = await NativeBridge.map('scanGame');
+          if (mounted) {
+            setState(() {
+              _game = game;
+              if (game['success'] != true) {
+                _message =
+                    game['message'] as String? ??
+                    'Chưa nhận diện được dữ liệu game.';
+              }
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() {
+              _game = {'success': false, 'message': _error(e)};
+              _message = _error(e);
+            });
+          }
+        }
+        final freshStatus = await NativeBridge.map('status');
+        if (mounted) setState(() => _status = freshStatus);
       }
       try {
         final channel = ReleaseInfo.channel(
@@ -69,10 +104,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) {
           setState(() {
             _remote = channel;
-            _onlineMessage = 'Đã kiểm tra kênh cập nhật';
+            final appNew =
+                (channel.data['app_code'] as int? ?? 0) >
+                (_status['appCode'] as int? ?? 10401);
+            final patchNew =
+                channel.code >
+                (_game['installed_code'] as int? ?? _bundled?.code ?? 0);
+            _onlineMessage = appNew || patchNew
+                ? 'Có bản mới. Chọn cập nhật bên dưới.'
+                : 'Đã kiểm tra: bạn đang có gói và ứng dụng mới nhất.';
           });
+          _maybeNotice();
         }
-      } catch (e) {
+      } catch (_) {
         if (mounted) {
           setState(
             () => _onlineMessage =
@@ -83,8 +127,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } catch (e) {
       if (mounted) setState(() => _message = _error(e));
     } finally {
-      if (mounted) setState(() => _checking = false);
+      if (mounted) {
+        setState(() => _checking = false);
+        if (_refreshPending && !_busy) {
+          _refreshPending = false;
+          _refresh();
+        }
+      }
     }
+  }
+
+  Future<void> _maybeNotice({bool force = false}) async {
+    final data = _remote?.data;
+    final notice = CommunityNotice.fromChannel(
+      data != null && data.containsKey('notice') ? data : _bundled?.data ?? {},
+    );
+    if (!mounted || _noticeOpen || notice == null) return;
+    if (!force &&
+        (!_noticeRequested && _noticeShown == notice.id ||
+            notice.isSnoozed(_status, DateTime.now()))) {
+      return;
+    }
+    _noticeOpen = true;
+    _noticeRequested = false;
+    _noticeShown = notice.id;
+    final snooze = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (c) => AlertDialog(
+        title: Text(notice.title),
+        content: SingleChildScrollView(child: SelectableText(notice.body)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Tắt'),
+          ),
+          FilledButton.tonal(
+            onPressed: () => Navigator.pop(c, true),
+            child: const Text('Tắt trong 24 giờ'),
+          ),
+        ],
+      ),
+    );
+    if (snooze == true) {
+      try {
+        await NativeBridge.action('snoozeNotice', {'id': notice.id});
+        if (mounted) _status = await NativeBridge.map('status');
+      } catch (e) {
+        if (mounted) setState(() => _message = _error(e));
+      }
+    }
+    _noticeOpen = false;
   }
 
   String _error(Object e) => e is PlatformException
@@ -314,6 +407,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     controller.dispose();
   }
 
+  Future<void> _copyReport() async {
+    await Clipboard.setData(
+      ClipboardData(
+        text: const JsonEncoder.withIndent('  ').convert({
+          'app': _status['appVersion'] ?? '1.4.1',
+          'status': _status,
+          'game': _game,
+          'message': _message,
+        }),
+      ),
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã sao chép báo cáo để gửi hỗ trợ.')),
+      );
+    }
+  }
+
   Widget _step(
     int n,
     String title,
@@ -360,7 +471,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final recovery =
         _game['recovery_required'] == true ||
         _status['recoveryPending'] == true;
-    final latest = _remote ?? _bundled;
+    final latest =
+        _remote != null && (_bundled == null || _remote!.code >= _bundled!.code)
+        ? _remote
+        : _bundled;
     final hasUpdate =
         latest != null &&
         latest.newerThan((_game['installed_code'] as int?) ?? 0);
@@ -368,6 +482,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       appBar: AppBar(
         title: const Text('CZN Việt Hóa'),
         actions: [
+          IconButton(
+            tooltip: 'Thông báo cộng đồng',
+            onPressed: _busy ? null : () => _maybeNotice(force: true),
+            icon: const Icon(Icons.campaign_outlined),
+          ),
           IconButton(
             tooltip: 'Kiểm tra cập nhật',
             onPressed: _busy || _checking ? null : _refresh,
@@ -433,28 +552,83 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _step(
             2,
             'Chuẩn bị game',
-            _status['package'] == null
-                ? 'Cài CZN từ cửa hàng chính thức. Mở game và tải đủ dữ liệu, gồm ngôn ngữ văn bản 日本語 (Tiếng Nhật).'
+            !access
+                ? 'Cấp quyền Shizuku ở bước 1 để app kiểm tra dữ liệu. Mở game, chọn 日本語 và chờ tải xong; sau đó quay lại bấm Kiểm tra lại.'
+                : _status['package'] == null
+                ? 'Chưa nhận diện được gói CZN được hỗ trợ. Game từ TapTap cũng được nhận theo mã gói. Cài game cùng hồ sơ Android với patcher; gửi báo cáo nếu vẫn không thấy game.'
                 : (_game['success'] == true
                       ? 'Đã tìm thấy dữ liệu CZN. App sẽ đóng game trước khi cài.'
                       : (_game['message'] as String? ??
                             'Mở CZN, tải đủ dữ liệu và chọn 日本語 trong cài đặt ngôn ngữ.')),
-            OutlinedButton.icon(
-              onPressed: _busy
-                  ? null
-                  : () async {
-                      final opened = await NativeBridge.action('launchGame');
-                      if (!opened) {
-                        await launchUrl(
-                          Uri.parse(
-                            'https://play.google.com/store/apps/details?id=com.smilegate.chaoszero.stove.google',
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if ((_status['games'] as List? ?? []).length > 1)
+                  DropdownButtonFormField<String>(
+                    initialValue: _status['package'] as String?,
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Bản game muốn cài',
+                    ),
+                    items: (_status['games'] as List)
+                        .map(
+                          (g) => DropdownMenuItem<String>(
+                            value: g['package'] as String,
+                            child: Text(g['package'] as String),
                           ),
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Mở CZN'),
+                        )
+                        .toList(),
+                    onChanged: _busy
+                        ? null
+                        : (pkg) async {
+                            await NativeBridge.action('selectGame', {
+                              'package': pkg,
+                            });
+                            if (mounted) setState(() => _game = {});
+                            await _refresh();
+                          },
+                  ),
+                OutlinedButton.icon(
+                  onPressed: _busy
+                      ? null
+                      : () async {
+                          try {
+                            final opened = await NativeBridge.action(
+                              'launchGame',
+                            );
+                            if (!opened) {
+                              await launchUrl(
+                                Uri.parse(
+                                  'https://play.google.com/store/apps/details?id=com.smilegate.chaoszero.stove.google',
+                                ),
+                                mode: LaunchMode.externalApplication,
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) setState(() => _message = _error(e));
+                          }
+                        },
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Mở CZN'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _busy || _checking
+                      ? null
+                      : (access ? _refresh : _access),
+                  icon: const Icon(Icons.search),
+                  label: const Text('Kiểm tra lại dữ liệu game'),
+                ),
+                if (_status['package'] != null)
+                  Text(
+                    'Bản game: ${_status['package']}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (_game['success'] == false)
+                  TextButton(
+                    onPressed: _copyReport,
+                    child: const Text('Sao chép báo cáo lỗi bước 2'),
+                  ),
+              ],
             ),
             done: _game['success'] == true,
           ),
@@ -470,6 +644,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   _busy ||
                       _bundled == null ||
                       _status['package'] == null ||
+                      _game['success'] != true ||
                       recovery
                   ? null
                   : _install,
@@ -521,6 +696,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ],
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _busy || _checking ? null : _refresh,
+            icon: const Icon(Icons.system_update_alt),
+            label: const Text('Kiểm tra cập nhật'),
+          ),
+          if (_remote != null &&
+              _remote!.code >
+                  (_game['installed_code'] as int? ?? _bundled?.code ?? 0))
+            FilledButton.tonal(
+              onPressed: _busy || _status['package'] == null ? null : _install,
+              child: const Text('Tải và cập nhật bản dịch'),
+            ),
           if (_remote != null &&
               (_remote!.data['app_code'] as int? ?? 0) >
                   (_status['appCode'] as int? ?? 10400)) ...[
@@ -562,32 +750,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       onPressed: () => showLicensePage(
                         context: context,
                         applicationName: 'CZN Việt Hóa',
-                        applicationVersion: '1.4.0',
+                        applicationVersion:
+                            _status['appVersion'] as String? ?? '1.4.1',
                       ),
                       child: const Text('Giấy phép thư viện'),
                     ),
                     TextButton(
-                      onPressed: () async {
-                        await Clipboard.setData(
-                          ClipboardData(
-                            text: const JsonEncoder.withIndent('  ').convert({
-                              'app': '1.4.0',
-                              'status': _status,
-                              'game': _game,
-                              'message': _message,
-                            }),
-                          ),
-                        );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Đã sao chép báo cáo để gửi hỗ trợ.',
-                              ),
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: _copyReport,
                       child: const Text('Sao chép báo cáo'),
                     ),
                   ],
@@ -598,7 +767,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 16),
           const Center(
             child: Text(
-              'CZN Việt Hóa · 1.4.0',
+              'CZN Việt Hóa · 1.4.1',
               style: TextStyle(color: Colors.white38),
             ),
           ),
