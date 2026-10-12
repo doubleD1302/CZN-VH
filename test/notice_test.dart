@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:czn_patcher/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:czn_patcher/services/notice_policy.dart';
 
 void main() {
+  setUp(
+    () => SharedPreferences.setMockInitialValues({'companion_visible': false}),
+  );
   TestWidgetsFlutterBinding.ensureInitialized();
   final now = DateTime.utc(2026, 10, 12);
   const notice = CommunityNotice('n1', 'Tin mới', 'Nội dung');
@@ -201,6 +205,10 @@ void main() {
     gate.complete(release);
     await tester.pumpAndSettle();
     expect(scans, 2);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step-2-status')),
+      150,
+    );
     expect(find.textContaining('Đã tìm thấy dữ liệu CZN'), findsOneWidget);
   });
 }

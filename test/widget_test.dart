@@ -2,10 +2,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:czn_patcher/main.dart';
 import 'package:czn_patcher/services/patch_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
+    SharedPreferences.setMockInitialValues({'companion_visible': false});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('vn.czn.viethoa/patcher'),
@@ -54,6 +56,7 @@ void main() {
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pumpAndSettle();
     expect(find.text('CZN Việt Hóa'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('1. Kết nối Shizuku'), 150);
     expect(find.text('1. Kết nối Shizuku'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('Bản đi kèm vẫn có thể cài.'),
@@ -73,6 +76,15 @@ void main() {
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.text('Cài từ gói tải sẵn'), 240);
+    await tester.ensureVisible(find.text('Cài từ gói tải sẵn'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.text('Hướng dẫn và trợ giúp'), 240);
+    await tester.tap(find.text('Hướng dẫn và trợ giúp'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Sao chép báo cáo'), 240);
     expect(tester.takeException(), isNull);
   });
 }

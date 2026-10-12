@@ -7,10 +7,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/native_bridge.dart';
 import '../services/notice_policy.dart';
 import '../services/patch_service.dart';
+import 'czn_components.dart';
+import 'czn_theme.dart';
+import 'czn_companion.dart';
+import 'app_update_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,11 +31,49 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   double _progress = 0;
   bool _refreshPending = false, _noticeOpen = false, _noticeRequested = true;
   String? _noticeShown;
+  bool _showCompanion = true;
+  bool _appUpdating = false;
+  String _appUpdateMessage = '';
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_loadCompanionSetting());
     _refresh();
+  }
+
+  Future<void> _loadCompanionSetting() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(
+          () => _showCompanion = prefs.getBool('companion_visible') ?? true,
+        );
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setCompanionVisible(bool visible) async {
+    if (mounted) setState(() => _showCompanion = visible);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('companion_visible', visible);
+    } catch (_) {}
+  }
+
+  void _hideCompanion() {
+    unawaited(_setCompanionVisible(false));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Đã ẩn nhân vật. Bạn có thể bật lại trong Cài đặt.',
+        ),
+        action: SnackBarAction(
+          label: 'Hiện lại',
+          onPressed: () => _setCompanionVisible(true),
+        ),
+      ),
+    );
   }
 
   @override
@@ -44,6 +87,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused) {
       _noticeRequested = true;
       _noticeShown = null;
+    }
+    if (state == AppLifecycleState.resumed && _appUpdating) {
+      _refreshPending = true;
     }
     if (state == AppLifecycleState.resumed && !_busy) {
       if (_checking) {
@@ -120,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _remote = channel;
             final appNew =
                 (channel.data['app_code'] as int? ?? 0) >
-                (_status['appCode'] as int? ?? 10402);
+                (_status['appCode'] as int? ?? 10501);
             final patchNew =
                 channel.code >
                 (_game['installed_code'] as int? ?? _bundled?.code ?? 0);
@@ -146,6 +192,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (_refreshPending && !_busy) {
           _refreshPending = false;
           _refresh();
+        } else if (_status['pendingAppUpdate'] == true &&
+            _status['appInstallAllowed'] == true &&
+            !_busy) {
+          unawaited(_updateApp(resume: true));
         }
       }
     }
@@ -156,7 +206,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final notice = CommunityNotice.fromChannel(
       data != null && data.containsKey('notice') ? data : _bundled?.data ?? {},
     );
-    if (!mounted || _busy || _noticeOpen || notice == null) return;
+    if (!mounted ||
+        _busy ||
+        _status['pendingAppUpdate'] == true ||
+        _noticeOpen ||
+        notice == null) {
+      return;
+    }
     if (!force &&
         (!_noticeRequested && _noticeShown == notice.id ||
             notice.isSnoozed(_status, DateTime.now()))) {
@@ -423,23 +479,105 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _updateApp() async {
+  Future<void> _updateApp({bool resume = false}) async {
+    if (_busy || _checking) return;
     final release = _remote;
-    if (release == null) return;
-    await _run(
-      () async {
-        setState(() => _downloading = true);
-        final path = await NativeBridge.download(release.data, apk: true);
-        if (mounted) setState(() => _downloading = false);
-        await NativeBridge.action('installApp', {'path': path});
-        return {
-          'success': true,
-          'message': 'Đã mở trình cài cập nhật ứng dụng. Xác nhận trên màn hình Android.',
-        };
-      },
-      scanGame: false,
-      action: 'appUpdate',
-    );
+    if (!resume &&
+        AppUpdateInfo.fromChannel(
+              release?.data,
+              _status['appCode'] as int? ?? 10501,
+            ) ==
+            null) {
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _appUpdating = true;
+      _downloading = !resume;
+      _progress = 0;
+      _appUpdateMessage = resume
+          ? 'Đang mở trình cài cập nhật…'
+          : 'Đang tải APK cập nhật…';
+    });
+    var finished = false;
+    final subscription = NativeBridge.progress.receiveBroadcastStream().listen((
+      event,
+    ) {
+      if (!mounted || finished) return;
+      final data = Map<String, dynamic>.from(event as Map);
+      setState(() {
+        _appUpdateMessage = data['label'] as String;
+        _progress = (data['percent'] as num).toDouble() / 100;
+      });
+    }, onError: (_) {});
+    try {
+      Map<String, dynamic> result;
+      if (resume) {
+        result = await NativeBridge.map('resumeAppUpdate');
+      } else {
+        final path = await NativeBridge.download(release!.data, apk: true);
+        if (!mounted) return;
+        setState(() {
+          _downloading = false;
+          _progress = 1;
+          _appUpdateMessage = 'Đã tải và kiểm tra APK. Đang mở trình cài…';
+        });
+        result = await NativeBridge.map('installApp', {'path': path});
+      }
+      if (result['state'] != 'installer_opened' &&
+          result['state'] != 'permission_required') {
+        throw Exception('Chưa mở được trình cài cập nhật của Android.');
+      }
+      finished = true;
+      if (mounted) {
+        setState(
+          () => _appUpdateMessage = result['state'] == 'permission_required'
+              ? 'Bật “Cho phép từ nguồn này”, rồi quay lại app. APK đã tải sẽ được dùng để tiếp tục cập nhật.'
+              : 'Xác nhận Cập nhật trên màn hình Android. App sẽ hiển thị phiên bản đang dùng khi bạn mở lại.',
+        );
+      }
+    } catch (e) {
+      finished = true;
+      if (mounted) {
+        setState(() => _appUpdateMessage = _error(e));
+        await showDialog<void>(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text('Chưa cập nhật được ứng dụng'),
+            content: SingleChildScrollView(child: Text(_appUpdateMessage)),
+            actions: [
+              TextButton(
+                onPressed: _copyReport,
+                child: const Text('Sao chép lỗi'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(c),
+                child: const Text('Đóng'),
+              ),
+            ],
+          ),
+        );
+      }
+    } finally {
+      finished = true;
+      unawaited(subscription.cancel().catchError((Object _) {}));
+      if (mounted) {
+        try {
+          _status = await NativeBridge.map('status');
+        } catch (_) {}
+        if (mounted) {
+          setState(() {
+            _busy = false;
+            _appUpdating = false;
+            _downloading = false;
+          });
+          if (_refreshPending) {
+            _refreshPending = false;
+            unawaited(_refresh());
+          }
+        }
+      }
+    }
   }
 
   Future<void> _settings() async {
@@ -447,20 +585,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       text: _status['channel'] as String?,
     );
     bool auto = _status['autoDownload'] != false;
+    bool companion = _showCompanion;
     final save = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, update) => AlertDialog(
-          title: const Text('Cập nhật tự động'),
+          title: const Text('Cài đặt'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
+                  title: const Text('Hiện nhân vật đồng hành'),
+                  subtitle: const Text(
+                    'Kéo bằng tay để đổi vị trí. Nhấn giữ nhân vật để ẩn.',
+                  ),
+                  value: companion,
+                  onChanged: (v) => update(() => companion = v),
+                ),
+                const Divider(),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
                   title: const Text('Tự tải bản mới qua Wi-Fi'),
                   subtitle: const Text(
-                    'Kiểm tra mỗi 12 giờ. Thông báo khi đã tải xong; bấm cài để áp dụng.',
+                    'Kiểm tra mỗi 12 giờ. Bản dịch tự tải; APK mới có thông báo để bạn cập nhật trong app.',
                   ),
                   value: auto,
                   onChanged: (v) => update(() => auto = v),
@@ -492,6 +641,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
     if (save == true) {
+      await _setCompanionVisible(companion);
       try {
         await NativeBridge.action('saveSettings', {
           'channel': controller.text.trim(),
@@ -511,11 +661,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Clipboard.setData(
       ClipboardData(
         text: const JsonEncoder.withIndent('  ').convert({
-          'app': _status['appVersion'] ?? '1.4.2',
+          'app': _status['appVersion'] ?? '1.5.1',
           'status': _status,
           'game': _game,
           'lastOperation': _lastOperation,
           'message': _message,
+          'appUpdateMessage': _appUpdateMessage,
         }),
       ),
     );
@@ -532,39 +683,87 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     String description,
     Widget? action, {
     bool done = false,
-  }) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                key: Key('step-$n-status'),
-                done ? Icons.check_circle : Icons.radio_button_unchecked,
-                color: done ? const Color(0xFF34D399) : Colors.white54,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '$n. $title',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            description,
-            style: const TextStyle(color: Colors.white70, height: 1.5),
-          ),
-          if (action != null) ...[const SizedBox(height: 14), action],
-        ],
+  }) {
+    final active =
+        !done &&
+        (n == 1 || _status['accessGranted'] == true) &&
+        (n < 3 || _game['success'] == true);
+    final accent = done
+        ? CznColors.green
+        : active
+        ? CznColors.red
+        : CznColors.border;
+    return Container(
+      decoration: BoxDecoration(
+        color: CznColors.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: accent.withValues(alpha: done || active ? .45 : 1),
+        ),
       ),
-    ),
-  );
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: .10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(
+                    key: Key('step-$n-status'),
+                    done
+                        ? Icons.check_circle
+                        : [Icons.key_outlined, Icons.radar, Icons.translate][n -
+                              1],
+                    size: 19,
+                    color: done
+                        ? CznColors.green
+                        : active
+                        ? CznColors.red
+                        : CznColors.muted,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'BƯỚC 0$n  /  ${done ? 'HOÀN TẤT' : 'THIẾT LẬP'}',
+                        style: TextStyle(
+                          fontSize: 9,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w700,
+                          color: done ? CznColors.green : CznColors.muted,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$n. $title',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(description, style: Theme.of(context).textTheme.bodyMedium),
+            if (action != null) ...[const SizedBox(height: 14), action],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final access = _status['accessGranted'] == true;
@@ -584,9 +783,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final hasUpdate =
         latest != null &&
         latest.newerThan((_game['installed_code'] as int?) ?? 0);
+    final appUpdate = AppUpdateInfo.fromChannel(
+      _remote?.data,
+      _status['appCode'] as int? ?? 10501,
+    );
     return Scaffold(
       appBar: AppBar(
-        title: const Text('CZN Việt Hóa'),
+        title: const Row(
+          children: [
+            CznMark(size: 28),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'CZN Việt Hóa',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Thông báo cộng đồng',
@@ -594,319 +809,416 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             icon: const Icon(Icons.campaign_outlined),
           ),
           IconButton(
-            tooltip: 'Kiểm tra cập nhật',
-            onPressed: _busy || _checking ? null : _refresh,
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Cài đặt cập nhật',
+            tooltip: 'Cài đặt',
             onPressed: _busy || _checking ? null : _settings,
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-        children: [
-          Text(
-            'Chơi CZN bằng tiếng Việt',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Thiết lập một lần. Bản dịch mới được tự tải qua Wi-Fi.',
-            style: TextStyle(color: Colors.white70, height: 1.5),
-          ),
-          const SizedBox(height: 20),
-          if (_lastOperation.isNotEmpty && !_busy)
-            Card(
-              key: const Key('operation-result'),
-              color: _lastOperation['success'] == true
-                  ? const Color(0xFF16372E)
-                  : const Color(0xFF482A25),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _lastOperation['phase'] == 'running'
-                          ? 'Lần cài trước chưa có kết quả xác minh'
-                          : 'Kết quả thao tác gần nhất',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(_lastOperation['message'] as String? ?? _message),
-                    if (_lastOperation['success'] != true)
-                      TextButton(
-                        onPressed: _copyReport,
-                        child: const Text('Sao chép lỗi cài đặt'),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          if (installed)
-            Card(
-              color: const Color(0xFF16372E),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Đã cài bản ${_game['installed_version']} · Dữ liệu đã kiểm tra',
-                ),
-              ),
-            ),
-          if (_game['installed_version'] != null && !installed)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text(
-                  'Dữ liệu game đã thay đổi. Hoàn tất cập nhật game trước khi cài lại.',
-                ),
-              ),
-            ),
-          const SizedBox(height: 12),
-          _step(
-            1,
-            'Kết nối Shizuku',
-            access ? 'Đã cấp quyền. App có thể kiểm tra dữ liệu game.' : 'Cài Shizuku, khởi động bằng gỡ lỗi không dây rồi cấp quyền cho CZN Việt Hóa. Android 8–10 cần máy tính để khởi động Shizuku.',
-            access
-                ? null
-                : FilledButton.tonal(
-                    onPressed: _busy ? null : _access,
-                    child: Text(
-                      _status['shizukuRunning'] == true
-                          ? 'Cấp quyền cho app'
-                          : 'Mở / tải Shizuku',
-                    ),
-                  ),
-            done: access,
-          ),
-          const SizedBox(height: 12),
-          _step(
-            2,
-            'Chuẩn bị game',
-            !access
-                ? 'Cấp quyền Shizuku ở bước 1 để app kiểm tra dữ liệu. Mở game, chọn 日本語 và chờ tải xong; sau đó quay lại bấm Kiểm tra lại.'
-                : _status['package'] == null
-                ? 'Chưa nhận diện được gói CZN được hỗ trợ. Game từ TapTap cũng được nhận theo mã gói. Cài game cùng hồ sơ Android với patcher; gửi báo cáo nếu vẫn không thấy game.'
-                : (_game['success'] == true
-                      ? 'Đã tìm thấy dữ liệu CZN. App sẽ đóng game trước khi cài.'
-                      : (_game['message'] as String? ??
-                            'Mở CZN, tải đủ dữ liệu và chọn 日本語 trong cài đặt ngôn ngữ.')),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if ((_status['games'] as List? ?? []).length > 1)
-                  DropdownButtonFormField<String>(
-                    initialValue: _status['package'] as String?,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Bản game muốn cài',
-                    ),
-                    items: (_status['games'] as List)
-                        .map(
-                          (g) => DropdownMenuItem<String>(
-                            value: g['package'] as String,
-                            child: Text(g['package'] as String),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _busy || _checking
+      body: SafeArea(
+        top: false,
+        child: CznCompanion(
+          visible: _showCompanion && !_busy,
+          onHide: _hideCompanion,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+                children: [
+                  CznHero(patchVersion: latest?.version),
+                  const SizedBox(height: 14),
+                  AppUpdateCard(
+                    currentVersion: _status['appVersion'] as String? ?? '1.5.1',
+                    update: appUpdate,
+                    checking: _checking,
+                    updating: _appUpdating,
+                    pending: _status['pendingAppUpdate'] == true,
+                    message: _appUpdateMessage,
+                    progress: _progress,
+                    onCheck: _busy || _checking ? null : _refresh,
+                    onUpdate: _busy || _checking
                         ? null
-                        : (pkg) async {
-                            await NativeBridge.action('selectGame', {
-                              'package': pkg,
-                            });
-                            if (mounted) setState(() => _game = {});
-                            await _refresh();
-                          },
+                        : () => _updateApp(
+                            resume: _status['pendingAppUpdate'] == true,
+                          ),
+                    onCancel: _downloading
+                        ? () => NativeBridge.action('cancelDownload')
+                        : null,
                   ),
-                OutlinedButton.icon(
-                  onPressed: _busy || _checking
-                      ? null
-                      : () async {
-                          try {
-                            final opened = await NativeBridge.action(
-                              'launchGame',
-                            );
-                            if (!opened) {
-                              await launchUrl(
+                  CznStatusStrip(
+                    access: access,
+                    ready: _game['success'] == true,
+                    installed: installed,
+                  ),
+                  if (recovery) ...[
+                    Card(
+                      color: const Color(0xFF30241D),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const Text(
+                              'Cần phục hồi dữ liệu',
+                              style: TextStyle(
+                                color: CznColors.amber,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Lần cài trước chưa hoàn tất. Phục hồi giao dịch trước khi cài tiếp hoặc mở game.',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _busy || _checking || !access
+                                  ? null
+                                  : _restore,
+                              icon: const Icon(Icons.restore),
+                              label: const Text('Phục hồi giao dịch'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  const CznSectionLabel(
+                    'THIẾT LẬP TIẾNG VIỆT',
+                    trailing: '03 bước',
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      'Chọn 日本語 trong game. Hoàn tất ba bước dưới đây để cài bản dịch.',
+                    ),
+                  ),
+                  if (_lastOperation.isNotEmpty && !_busy)
+                    Card(
+                      key: const Key('operation-result'),
+                      color: _lastOperation['success'] == true
+                          ? const Color(0xFF152A27)
+                          : const Color(0xFF322025),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _lastOperation['phase'] == 'running'
+                                  ? 'Lần cài trước chưa có kết quả xác minh'
+                                  : 'Kết quả thao tác gần nhất',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _lastOperation['message'] as String? ?? _message,
+                            ),
+                            if (_lastOperation['success'] != true)
+                              TextButton(
+                                onPressed: _copyReport,
+                                child: const Text('Sao chép lỗi cài đặt'),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (installed)
+                    Card(
+                      color: const Color(0xFF152A27),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'Đã cài bản ${_game['installed_version']} · Dữ liệu đã kiểm tra',
+                        ),
+                      ),
+                    ),
+                  if (_game['installed_version'] != null && !installed)
+                    const Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          'Dữ liệu game đã thay đổi. Hoàn tất cập nhật game trước khi cài lại.',
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  _step(
+                    1,
+                    'Kết nối Shizuku',
+                    access ? 'Đã cấp quyền. App có thể kiểm tra dữ liệu game.' : 'Khởi động Shizuku bằng gỡ lỗi không dây, rồi cấp quyền cho app. Android 8–10 cần máy tính để khởi động Shizuku.',
+                    access
+                        ? null
+                        : FilledButton.tonal(
+                            onPressed: _busy || _checking ? null : _access,
+                            child: Text(
+                              _status['shizukuRunning'] == true
+                                  ? 'Cấp quyền cho app'
+                                  : 'Mở / tải Shizuku',
+                            ),
+                          ),
+                    done: access,
+                  ),
+                  const SizedBox(height: 12),
+                  _step(
+                    2,
+                    'Chuẩn bị game',
+                    !access
+                        ? 'Cấp quyền Shizuku ở bước 1 để app kiểm tra dữ liệu. Mở game, chọn 日本語 và chờ tải xong; sau đó quay lại bấm Kiểm tra lại.'
+                        : _status['package'] == null
+                        ? 'Chưa nhận diện được gói CZN được hỗ trợ. Game từ TapTap cũng được nhận theo mã gói. Cài game cùng hồ sơ Android với patcher; gửi báo cáo nếu vẫn không thấy game.'
+                        : (_game['success'] == true
+                              ? 'Đã tìm thấy dữ liệu CZN. App sẽ đóng game trước khi cài.'
+                              : (_game['message'] as String? ??
+                                    'Mở CZN, tải đủ dữ liệu và chọn 日本語 trong cài đặt ngôn ngữ.')),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if ((_status['games'] as List? ?? []).length > 1)
+                          DropdownButtonFormField<String>(
+                            initialValue: _status['package'] as String?,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              labelText: 'Bản game muốn cài',
+                            ),
+                            items: (_status['games'] as List)
+                                .map(
+                                  (g) => DropdownMenuItem<String>(
+                                    value: g['package'] as String,
+                                    child: Text(g['package'] as String),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _busy || _checking
+                                ? null
+                                : (pkg) async {
+                                    await NativeBridge.action('selectGame', {
+                                      'package': pkg,
+                                    });
+                                    if (mounted) setState(() => _game = {});
+                                    await _refresh();
+                                  },
+                          ),
+                        OutlinedButton.icon(
+                          onPressed: _busy || _checking
+                              ? null
+                              : () async {
+                                  try {
+                                    final opened = await NativeBridge.action(
+                                      'launchGame',
+                                    );
+                                    if (!opened) {
+                                      await launchUrl(
+                                        Uri.parse(
+                                          'https://play.google.com/store/apps/details?id=com.smilegate.chaoszero.stove.google',
+                                        ),
+                                        mode: LaunchMode.externalApplication,
+                                      );
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      setState(() => _message = _error(e));
+                                    }
+                                  }
+                                },
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Mở CZN'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _busy || _checking
+                              ? null
+                              : (access ? _refresh : _access),
+                          icon: const Icon(Icons.search),
+                          label: const Text('Kiểm tra lại dữ liệu game'),
+                        ),
+                        if (_status['package'] != null)
+                          Text(
+                            'Bản game: ${_status['package']}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        if (_game['success'] == false)
+                          TextButton(
+                            onPressed: _copyReport,
+                            child: const Text('Sao chép báo cáo lỗi bước 2'),
+                          ),
+                      ],
+                    ),
+                    done: _game['success'] == true,
+                  ),
+                  const SizedBox(height: 12),
+                  _step(
+                    3,
+                    'Cài tiếng Việt',
+                    latest == null
+                        ? 'Đang đọc bản dịch đi kèm…'
+                        : ('Bản ${latest.version}. Có sao lưu và kiểm tra dữ liệu sau cài. Nếu nguồn Nhật đã thay đổi, app sẽ chờ gói tương thích.'),
+                    FilledButton.icon(
+                      onPressed:
+                          _busy ||
+                              _checking ||
+                              _bundled == null ||
+                              _status['package'] == null ||
+                              _game['success'] != true ||
+                              recovery
+                          ? null
+                          : _install,
+                      icon: const Icon(Icons.download_done),
+                      label: Text(
+                        installed
+                            ? (hasUpdate
+                                  ? 'Cập nhật bản dịch'
+                                  : 'Cài lại bản dịch')
+                            : 'Cài tiếng Việt',
+                      ),
+                    ),
+                    done: installed,
+                  ),
+                  const CznSectionLabel('TRẠNG THÁI'),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Semantics(
+                            liveRegion: true,
+                            child: Text(
+                              _message,
+                              style: const TextStyle(
+                                color: CznColors.text,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                          if (_busy) ...[
+                            const SizedBox(height: 12),
+                            LinearProgressIndicator(value: _progress),
+                            if (_downloading)
+                              TextButton(
+                                onPressed: () =>
+                                    NativeBridge.action('cancelDownload'),
+                                child: const Text('Hủy tải'),
+                              ),
+                          ],
+                          if (_checking) ...[
+                            const SizedBox(height: 8),
+                            const LinearProgressIndicator(),
+                          ],
+                          if (_onlineMessage.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _onlineMessage,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const CznSectionLabel('QUẢN LÝ BẢN DỊCH'),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _busy || _checking ? null : _local,
+                        icon: const Icon(Icons.folder_open),
+                        label: const Text('Cài từ gói tải sẵn'),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _busy || _checking || !access
+                            ? null
+                            : _restore,
+                        icon: const Icon(Icons.restore),
+                        label: const Text('Khôi phục gốc'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_remote != null &&
+                      _remote!.code >
+                          (_game['installed_code'] as int? ??
+                              _bundled?.code ??
+                              0))
+                    FilledButton.tonal(
+                      onPressed:
+                          _busy ||
+                              _checking ||
+                              _status['package'] == null ||
+                              !access ||
+                              _game['success'] != true ||
+                              recovery
+                          ? null
+                          : _install,
+                      child: const Text('Tải và cập nhật bản dịch'),
+                    ),
+                  const SizedBox(height: 20),
+                  Card(
+                    child: ExpansionTile(
+                      title: const Text('Hướng dẫn và trợ giúp'),
+                      childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      children: [
+                        const Text(
+                          'Sau khi cài, mở game và đặt ngôn ngữ văn bản là 日本語. Bản dịch dùng slot tiếng Nhật; giọng lồng tiếng tùy bạn chọn.\n\nGame cập nhật có thể làm nguồn JP thay đổi. App sẽ kiểm tra lại và chờ bản dịch phù hợp. Shizuku cần được khởi động lại sau khi điện thoại khởi động.\n\nBản vá thay tài nguyên cục bộ. Kiểm tra checksum không phải xác nhận an toàn tài khoản từ nhà phát hành.',
+                          style: TextStyle(height: 1.5),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            TextButton(
+                              onPressed: () => launchUrl(
                                 Uri.parse(
-                                  'https://play.google.com/store/apps/details?id=com.smilegate.chaoszero.stove.google',
+                                  'https://shizuku.rikka.app/guide/setup/',
                                 ),
                                 mode: LaunchMode.externalApplication,
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) setState(() => _message = _error(e));
-                          }
-                        },
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Mở CZN'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: _busy || _checking
-                      ? null
-                      : (access ? _refresh : _access),
-                  icon: const Icon(Icons.search),
-                  label: const Text('Kiểm tra lại dữ liệu game'),
-                ),
-                if (_status['package'] != null)
-                  Text(
-                    'Bản game: ${_status['package']}',
-                    style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                              child: const Text('Hướng dẫn Shizuku'),
+                            ),
+                            TextButton(
+                              onPressed: () => launchUrl(
+                                Uri.parse(
+                                  'https://github.com/doubleD1302/CZN-VH',
+                                ),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                              child: const Text('Trang dự án'),
+                            ),
+                            TextButton(
+                              onPressed: () => showLicensePage(
+                                context: context,
+                                applicationName: 'CZN Việt Hóa',
+                                applicationVersion:
+                                    _status['appVersion'] as String? ?? '1.5.1',
+                              ),
+                              child: const Text('Giấy phép thư viện'),
+                            ),
+                            TextButton(
+                              onPressed: _copyReport,
+                              child: const Text('Sao chép báo cáo'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                if (_game['success'] == false)
-                  TextButton(
-                    onPressed: _copyReport,
-                    child: const Text('Sao chép báo cáo lỗi bước 2'),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: Text(
+                      'CZN Việt Hóa · ${_status['appVersion'] ?? '1.5.1'}',
+                      style: const TextStyle(
+                        color: CznColors.muted,
+                        fontSize: 11,
+                        letterSpacing: .5,
+                      ),
+                    ),
                   ),
-              ],
-            ),
-            done: _game['success'] == true,
-          ),
-          const SizedBox(height: 12),
-          _step(
-            3,
-            'Cài tiếng Việt',
-            latest == null
-                ? 'Đang đọc bản dịch đi kèm…'
-                : ('Bản ${latest.version}. Có sao lưu và kiểm tra dữ liệu sau cài. Nếu nguồn Nhật đã thay đổi, app sẽ chờ gói tương thích.'),
-            FilledButton.icon(
-              onPressed:
-                  _busy ||
-                      _checking ||
-                      _bundled == null ||
-                      _status['package'] == null ||
-                      _game['success'] != true ||
-                      recovery
-                  ? null
-                  : _install,
-              icon: const Icon(Icons.download_done),
-              label: Text(
-                installed
-                    ? (hasUpdate ? 'Cập nhật bản dịch' : 'Cài lại bản dịch')
-                    : 'Cài tiếng Việt',
+                ],
               ),
             ),
-            done: installed,
           ),
-          const SizedBox(height: 16),
-          Semantics(
-            liveRegion: true,
-            child: Text(_message, style: const TextStyle(height: 1.5)),
-          ),
-          if (_busy) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(value: _progress),
-            if (_downloading)
-              TextButton(
-                onPressed: () => NativeBridge.action('cancelDownload'),
-                child: const Text('Hủy tải'),
-              ),
-          ],
-          if (_checking) ...[
-            const SizedBox(height: 8),
-            const LinearProgressIndicator(),
-          ],
-          if (_onlineMessage.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(_onlineMessage, style: Theme.of(context).textTheme.bodySmall),
-          ],
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _busy || _checking ? null : _local,
-                icon: const Icon(Icons.folder_open),
-                label: const Text('Cài từ gói tải sẵn'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _busy || _checking || !access ? null : _restore,
-                icon: const Icon(Icons.restore),
-                label: Text(recovery ? 'Phục hồi giao dịch' : 'Khôi phục gốc'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _busy || _checking ? null : _refresh,
-            icon: const Icon(Icons.system_update_alt),
-            label: const Text('Kiểm tra cập nhật'),
-          ),
-          if (_remote != null &&
-              _remote!.code >
-                  (_game['installed_code'] as int? ?? _bundled?.code ?? 0))
-            FilledButton.tonal(
-              onPressed: _busy || _status['package'] == null ? null : _install,
-              child: const Text('Tải và cập nhật bản dịch'),
-            ),
-          if (_remote != null &&
-              (_remote!.data['app_code'] as int? ?? 0) >
-                  (_status['appCode'] as int? ?? 10400)) ...[
-            const SizedBox(height: 12),
-            FilledButton.tonal(
-              onPressed: _busy || _checking ? null : _updateApp,
-              child: const Text('Cập nhật ứng dụng'),
-            ),
-          ],
-          const SizedBox(height: 20),
-          Card(
-            child: ExpansionTile(
-              title: const Text('Hướng dẫn và trợ giúp'),
-              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              children: [
-                const Text(
-                  'Sau khi cài, mở game và đặt ngôn ngữ văn bản là 日本語. Bản dịch dùng slot tiếng Nhật; giọng lồng tiếng tùy bạn chọn.\n\nGame cập nhật có thể làm nguồn JP thay đổi. App sẽ kiểm tra lại và chờ bản dịch phù hợp. Shizuku cần được khởi động lại sau khi điện thoại khởi động.\n\nBản vá thay tài nguyên cục bộ. Kiểm tra checksum không phải xác nhận an toàn tài khoản từ nhà phát hành.',
-                  style: TextStyle(height: 1.5),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed: () => launchUrl(
-                        Uri.parse('https://shizuku.rikka.app/guide/setup/'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                      child: const Text('Hướng dẫn Shizuku'),
-                    ),
-                    TextButton(
-                      onPressed: () => launchUrl(
-                        Uri.parse('https://github.com/doubleD1302/CZN-VH'),
-                        mode: LaunchMode.externalApplication,
-                      ),
-                      child: const Text('Dự án và bản phát hành'),
-                    ),
-                    TextButton(
-                      onPressed: () => showLicensePage(
-                        context: context,
-                        applicationName: 'CZN Việt Hóa',
-                        applicationVersion:
-                            _status['appVersion'] as String? ?? '1.4.2',
-                      ),
-                      child: const Text('Giấy phép thư viện'),
-                    ),
-                    TextButton(
-                      onPressed: _copyReport,
-                      child: const Text('Sao chép báo cáo'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Center(
-            child: Text(
-              'CZN Việt Hóa · 1.4.2',
-              style: TextStyle(color: Colors.white38),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

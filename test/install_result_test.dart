@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:czn_patcher/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   Map<String, dynamic> result = {}, receipt = {}, scan = {};
   final calls = <String>[];
   setUp(() {
+    SharedPreferences.setMockInitialValues({'companion_visible': false});
     receipt = {};
     scan = {'success': true};
     calls.clear();
@@ -107,6 +109,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('operation-result')),
+      150,
+    );
     expect(find.byKey(const Key('operation-result')), findsOneWidget);
     expect(find.text('Cache game chưa sẵn sàng.'), findsWidgets);
   });

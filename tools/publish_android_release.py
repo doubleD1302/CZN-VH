@@ -10,6 +10,13 @@ def digest(f):
  with f.open('rb') as s:
   for b in iter(lambda:s.read(1048576),b''):h.update(b)
  return h.hexdigest()
+
+def app_only_channel(previous,version,code,url,size,sha):
+ if previous.get('schema')!=1 or previous.get('type')!='channel':raise ValueError('Invalid baseline channel')
+ if code<=previous.get('app_code',0):raise ValueError('App update must have a higher version code')
+ result=dict(previous)
+ result.update(app_version=version,app_code=code,app_url=url,app_size=size,app_sha256=sha)
+ return result
 def credentials():
  env=dict(os.environ,GIT_TERMINAL_PROMPT='0',GCM_INTERACTIVE='Never')
  r=subprocess.run(['git','credential','fill'],input='protocol=https\nhost=github.com\n\n',text=True,capture_output=True,env=env,check=True,timeout=30)
@@ -24,7 +31,7 @@ def api(token,url,method='GET',body=None,binary=False):
   else:data=json.dumps(body,ensure_ascii=False).encode('utf-8');headers['Content-Type']='application/json'
  with urllib.request.urlopen(urllib.request.Request(url,headers=headers,method=method,data=data),timeout=120) as response:return json.load(response)
 def main():
- a=argparse.ArgumentParser();a.add_argument('--directory',type=Path,default=P/'data/releases/android-v1.4.0');a.add_argument('--version',default='1.4.0');a.add_argument('--code',type=int,default=10400);a.add_argument('--apk',type=Path);a.add_argument('--publish',action='store_true');a.add_argument('--notice',type=Path);a.add_argument('--pc-exe',type=Path);args=a.parse_args();out=args.directory
+ a=argparse.ArgumentParser();a.add_argument('--directory',type=Path,default=P/'data/releases/android-v1.4.0');a.add_argument('--version',default='1.4.0');a.add_argument('--code',type=int,default=10400);a.add_argument('--apk',type=Path);a.add_argument('--publish',action='store_true');a.add_argument('--notice',type=Path);a.add_argument('--pc-exe',type=Path);a.add_argument('--app-only',action='store_true');a.add_argument('--baseline-channel',type=Path);args=a.parse_args();out=args.directory
  apk=args.apk or out/f'CZN_VietHoa_Android_v{args.version}.apk';bundle=out/f'CZN_Android_v{args.version}.cznpatch';tag='android-v'+args.version;url=f'https://github.com/doubleD1302/CZN-VH/releases/download/{tag}/'
  import re
  sdk_props=(APP/'android/local.properties').read_text('utf-8-sig')
@@ -35,12 +42,24 @@ def main():
  match=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging)
  if not match or match.group(1)!='vn.czn.viethoa.community':raise RuntimeError('APK identity is not the community app')
  app_code=int(match.group(2));app_version=match.group(3)
- channel=dict(schema=1,type='channel',patch_version=args.version,patch_code=args.code,patch_url=url+bundle.name,patch_size=bundle.stat().st_size,patch_sha256=digest(bundle),app_version=app_version,app_code=app_code,app_url=url+apk.name,app_size=apk.stat().st_size,app_sha256=digest(apk),changelog='Bản cộng đồng: cài qua Shizuku, backup/rollback, cập nhật có chữ ký và bản dịch JP đi kèm.')
+ if args.app_only:
+  from android_sync import verify_metadata,fetch,CHANNEL
+  raw_baseline=args.baseline_channel.read_bytes() if args.baseline_channel else fetch(CHANNEL)
+  previous=verify_metadata(raw_baseline)
+  if app_version!=args.version or app_code!=args.code:raise ValueError('App-only tag/code must match the APK')
+  channel=app_only_channel(previous,app_version,app_code,url+apk.name,apk.stat().st_size,digest(apk))
+  (out/'BASELINE_CHANNEL.json').write_bytes(raw_baseline)
+ else:
+  channel=dict(schema=1,type='channel',patch_version=args.version,patch_code=args.code,patch_url=url+bundle.name,patch_size=bundle.stat().st_size,patch_sha256=digest(bundle),app_version=app_version,app_code=app_code,app_url=url+apk.name,app_size=apk.stat().st_size,app_sha256=digest(apk),changelog='Bản cộng đồng: cài qua Shizuku, backup/rollback, cập nhật có chữ ký và bản dịch JP đi kèm.')
  if args.notice:
   channel['notice']=json.loads(args.notice.read_text('utf-8'))
  raw=out/'channel.descriptor.json';raw.write_text(json.dumps(channel,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
- subprocess.run(['pwsh','-NoProfile','-File',str(P/'tools/sign_android_metadata.ps1'),'-InputFile',str(raw),'-KeyFile',str(APP/'.signing/update-private.pk8'),'-OutputFile',str(out/'channel.json')],check=True)
- assets=[apk,bundle,out/'channel.json',out/'HUONG_DAN_ANDROID.txt']
+ from android_sync import verify_metadata
+ signed=out/'channel.json'
+ if not signed.exists() or verify_metadata(signed.read_bytes())!=channel:
+  subprocess.run(['pwsh','-NoProfile','-File',str(P/'tools/sign_android_metadata.ps1'),'-InputFile',str(raw),'-KeyFile',str(APP/'.signing/update-private.pk8'),'-OutputFile',str(signed)],check=True)
+ if verify_metadata(signed.read_bytes())!=channel:raise RuntimeError('Signed channel differs from the prepared descriptor')
+ assets=[apk]+([] if args.app_only else [bundle])+[out/'channel.json',out/'HUONG_DAN_ANDROID.txt']
  if args.pc_exe:
   if args.pc_exe.suffix.lower()!='.exe':raise ValueError('Only the PC executable may be added')
   assets.append(args.pc_exe)
@@ -48,7 +67,11 @@ def main():
  if not args.publish:print(json.dumps({'prepared':True,'assets':[f.name for f in assets],'tag':tag}));return
  # Require actual check results and a new release; never overwrite remote assets.
  evidence=json.loads((out/'FINAL_VERIFICATION.json').read_text('utf-8'))
- if not evidence.get('technical_checks_passed') or evidence.get('apk_sha256')!=digest(apk) or evidence.get('bundle_sha256')!=digest(bundle):raise RuntimeError('Release checks/hash snapshot not complete')
+ if not evidence.get('technical_checks_passed') or evidence.get('apk_sha256')!=digest(apk):raise RuntimeError('Release checks/hash snapshot not complete')
+ if args.app_only:
+  if not evidence.get('signed_baseline_patch_unchanged') or evidence.get('baseline_channel_sha256')!=digest(out/'BASELINE_CHANNEL.json'):raise RuntimeError('App-only baseline checks/hash snapshot not complete')
+  if {k:v for k,v in previous.items() if k.startswith('patch_')}!={k:v for k,v in channel.items() if k.startswith('patch_')}:raise RuntimeError('App-only release changed patch metadata')
+ elif evidence.get('bundle_sha256')!=digest(bundle):raise RuntimeError('Bundle hash snapshot not complete')
  token=credentials();base='https://api.github.com/repos/doubleD1302/CZN-VH'
  repo=api(token,base)
  if not repo.get('permissions',{}).get('push'):raise RuntimeError('No repository write permission')
@@ -56,12 +79,13 @@ def main():
  except urllib.error.HTTPError as e:
   if e.code!=404:raise
  notes=(out/'RELEASE_NOTES.txt').read_text('utf-8')
- release=api(token,base+'/releases',method='POST',body={'tag_name':tag,'target_commitish':'main','name':'CZN Android v'+args.version+' · Kiểm chứng cộng đồng','body':notes,'draft':True,'prerelease':False})
+ release=api(token,base+'/releases',method='POST',body={'tag_name':tag,'target_commitish':evidence.get('source_commit','main'),'name':'CZN Android v'+args.version+' · Kiểm chứng cộng đồng','body':notes,'draft':True,'prerelease':False})
+ (out/'PUBLISH_STATE.json').write_text(json.dumps({'id':release['id'],'tag':tag,'asset_hashes':{f.name:digest(f) for f in assets}},indent=2),encoding='utf-8')
  upload=release['upload_url'].split('{')[0]
  for f in assets:
   from urllib.parse import quote
   result=api(token,upload+'?name='+quote(f.name),method='POST',body=f.read_bytes(),binary=True)
-  if result['size']!=f.stat().st_size:raise RuntimeError('Upload size mismatch')
+  if result['size']!=f.stat().st_size or result.get('digest')!='sha256:'+digest(f):raise RuntimeError('Upload size/SHA256 mismatch')
  release=api(token,base+'/releases/'+str(release['id']),method='PATCH',body={'draft':False,'make_latest':'true'})
  record={'url':release['html_url'],'tag':tag,'id':release['id'],'assets':[{x['name']:x['browser_download_url']} for x in api(token,base+'/releases/'+str(release['id']))['assets']]}
  (out/'PUBLISHED_RELEASE.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps({'published':True,'url':record['url']}))

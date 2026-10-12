@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'ui/home_screen.dart';
+import 'ui/czn_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,16 +23,7 @@ class CznPatcherApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'CZN Việt Hóa',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      brightness: Brightness.dark,
-      colorSchemeSeed: const Color(0xFF34D399),
-      scaffoldBackgroundColor: const Color(0xFF0F172A),
-      useMaterial3: true,
-      cardTheme: const CardThemeData(margin: EdgeInsets.zero),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(minimumSize: const Size(0, 52)),
-      ),
-    ),
+    theme: CznTheme.dark,
     home: const HomeScreen(),
   );
 }
