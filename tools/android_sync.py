@@ -94,6 +94,21 @@ def prepare(inst,version,title,body,key,log=print):
     record={'schema':1,'version':version,'code':code,'tag':tag,'directory':str(out),'asset_hashes':{f.name:digest(f) for f in assets},'evidence':evidence,'catalog_revision':report.get('catalog_revision'),'notice':channel['notice'],'app':{k:v for k,v in channel.items() if k.startswith('app_')},'gameplay':'pending_player'}
     (out/'SYNC_PREVIEW.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8');log('Đã dựng và xác thực gói. Chưa phát hành. Thư mục: '+str(out));return record
 
+def draft_for(token,preview,out):
+    pending=out/'PUBLISH_STATE.json'
+    if pending.exists():
+        saved=json.loads(pending.read_text('utf-8'));identity=saved.get('release_id')
+        if not isinstance(identity,int) or identity<=0:raise RuntimeError('ID bản nháp không hợp lệ.')
+        existing=api(token,'/releases/'+str(identity))
+        if not existing.get('draft') or existing.get('tag_name')!=preview['tag']:raise RuntimeError('Bản nháp đã đổi/đã công khai. Kiểm tra trạng thái trước khi phát hành tiếp.')
+        return existing
+    try:
+        api(token,'/releases/tags/'+preview['tag'])
+        raise RuntimeError('Release đã tồn tại; không ghi đè.')
+    except urllib.error.HTTPError as e:
+        if e.code!=404:raise
+    return None
+
 def publish(preview,token='',log=print):
     out=Path(preview['directory']);frozen=json.loads((out/'SYNC_PREVIEW.json').read_text('utf-8'))
     if frozen!=preview:raise RuntimeError('Bản chuẩn bị đã đổi. Dựng/duyệt lại trước khi phát hành.')
@@ -107,15 +122,7 @@ def publish(preview,token='',log=print):
     if {k:v for k,v in current.items() if k.startswith('app_')}!=preview['app']:raise RuntimeError('APK trên GitHub đã đổi. Dựng lại để giữ đúng kênh cập nhật APK.')
     token=credentials(token);repo=api(token,'')
     if not repo.get('permissions',{}).get('push'):raise RuntimeError('Không có quyền phát hành vào kho CZN-VH.')
-    release=None
-    pending=out/'PUBLISH_STATE.json'
-    try:
-        existing=api(token,'/releases/tags/'+preview['tag'])
-        saved=json.loads(pending.read_text('utf-8')) if pending.exists() else {}
-        if not existing.get('draft') or saved.get('release_id')!=existing['id']:raise RuntimeError('Release đã tồn tại; không ghi đè.')
-        release=existing
-    except urllib.error.HTTPError as e:
-        if e.code!=404:raise
+    release=draft_for(token,preview,out)
     notes=f"Cập nhật bản dịch {preview['version']}.\n\n"+channel.get('changelog','')+'\n\nGói JP có chữ ký, kiểm tra native/token/byte ngoài slot. Gameplay điện thoại chờ người chơi kiểm chứng.'
     if release is None:release=api(token,'/releases','POST',{'tag_name':preview['tag'],'target_commitish':'main','name':'CZN Android · Bản dịch '+preview['version'],'body':notes,'draft':True,'prerelease':False})
     # Keep the ID immediately: failed upload remains a recoverable draft, not a public incomplete channel.

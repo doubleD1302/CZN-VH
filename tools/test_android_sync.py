@@ -37,4 +37,15 @@ class SyncTests(unittest.TestCase):
    inst=Mock();inst.data=Path(temp);(inst.data/'journal.json').write_text('{}')
    with self.assertRaises(RuntimeError):sync.prepare(inst,'1.4.2','notice','body','key')
    inst.build.assert_not_called()
+ def test_retry_uses_saved_id_not_draft_tag_endpoint(self):
+  with tempfile.TemporaryDirectory() as temp:
+   out=Path(temp);(out/'PUBLISH_STATE.json').write_text('{"release_id":123}')
+   with patch.object(sync,'api',return_value={'id':123,'draft':True,'tag_name':'android-v1.4.2'}) as api:
+    self.assertEqual(sync.draft_for('fixture',{'tag':'android-v1.4.2'},out)['id'],123)
+    api.assert_called_once_with('fixture','/releases/123')
+ def test_retry_rejects_a_different_tag_before_upload(self):
+  with tempfile.TemporaryDirectory() as temp:
+   out=Path(temp);(out/'PUBLISH_STATE.json').write_text('{"release_id":123}')
+   with patch.object(sync,'api',return_value={'id':123,'draft':True,'tag_name':'unrelated'}):
+    with self.assertRaises(RuntimeError):sync.draft_for('fixture',{'tag':'android-v1.4.2'},out)
 if __name__=='__main__':unittest.main()
