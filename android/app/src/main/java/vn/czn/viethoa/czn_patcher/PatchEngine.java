@@ -35,6 +35,7 @@ public final class PatchEngine {
     public JSONObject inspect(File root)throws Exception{
         File h=home(root),jf=new File(h,"journal.json"),sf=new File(h,"state.json");JSONObject out=new JSONObject().put("root",root.getAbsolutePath()).put("recovery_required",jf.exists());
         if(sf.exists()){JSONObject s=json(sf);boolean matches=true;for(String rel:PatchFormat.keys(s.getJSONObject("installed")))if(!hash(PatchFormat.safe(root,rel)).equals(s.getJSONObject("installed").getString(rel)))matches=false;out.put("installed_version",s.getString("version")).put("installed_code",s.getInt("version_code")).put("files_match",matches);}
+        File cache=PatchFormat.safe(root,"manifest.ssra.etag");if(cache.isFile())out.put("cache_identity",CacheIdentity.describe(PatchFormat.bytes(cache,65536)));
         return out;
     }
     public JSONObject apply(File root,InputStream zip,Progress progress)throws Exception{
@@ -76,7 +77,7 @@ public final class PatchEngine {
                 File stagedManifest=PatchFormat.safe(stage,"manifest.ssra");PatchFormat.write(stagedManifest,manifest.data);if(new File(sourceRoot,"manifest.ssra.prev").exists()){File dest=PatchFormat.safe(stage,"manifest.ssra.prev");PatchFormat.write(dest,manifest.data);replacements.put("manifest.ssra.prev",dest);}if(new File(sourceRoot,"manifest.ssra.etag").exists()){File dest=PatchFormat.safe(stage,"manifest.ssra.etag");PatchFormat.write(dest,PatchFormat.identity(PatchFormat.bytes(new File(sourceRoot,"manifest.ssra.etag"),65536),manifest.data));replacements.put("manifest.ssra.etag",dest);}replacements.put("manifest.ssra",stagedManifest);
                 String baseId=PatchFormat.sha(new File(sourceRoot,"manifest.ssra"));File base=new File(h,"baselines/"+baseId);JSONObject originals=new JSONObject(),installed=new JSONObject();for(String rel:replacements.keySet()){File src=PatchFormat.safe(sourceRoot,rel),saved=PatchFormat.safe(base,rel);String digest=PatchFormat.sha(src);if(!saved.exists())copyFile(src,saved);if(!PatchFormat.sha(saved).equals(digest))throw new IOException("Backup không khớp nguồn: "+rel);originals.put(rel,digest);installed.put(rel,PatchFormat.sha(replacements.get(rel)));}
                 JSONObject next=new JSONObject().put("version",release.getString("version")).put("version_code",release.getInt("version_code")).put("baseline",baseId).put("original",originals).put("installed",installed);
-                progress.report("Sao lưu đã xác minh; đang cài bản dịch",70);transaction(root,work,id,replacements,prior,next,progress);return new JSONObject().put("success",true).put("version",next.getString("version"));
+                progress.report("Sao lưu đã xác minh; đang cài bản dịch",70);transaction(root,work,id,replacements,prior,next,progress);return new JSONObject().put("success",true).put("version",next.getString("version")).put("version_code",next.getInt("version_code"));
             }finally{if(!new File(h,"journal.json").exists()&&work.exists())remove(work);}
         }
     }

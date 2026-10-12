@@ -31,6 +31,19 @@ public class PatchEngineTest {
     @Test public void unknownZipEntryIsRejectedBeforeWriting()throws Exception{try{engine().apply(root,new ByteArrayInputStream(alteredZip(true,false)),(s,n)->{});fail();}catch(IOException expected){}assertEquals(original,hashes());}
     @Test public void corruptPayloadIsRejectedBeforeWriting()throws Exception{try{engine().apply(root,new ByteArrayInputStream(alteredZip(false,true)),(s,n)->{});fail();}catch(IOException expected){}assertEquals(original,hashes());}
 
+    @Test public void androidLFCacheInstallAndRestoreAreBothVerified()throws Exception{
+        File cache=new File(root,"manifest.ssra.etag");String old="https://cdn.example/android\nserver-etag\n123\n321\n";PatchFormat.write(cache,utf(old));Map<String,String> before=hashes();
+        assertTrue(engine().apply(root,new ByteArrayInputStream(zip),(t,n)->{}).getBoolean("success"));
+        JSONObject state=engine().inspect(root);assertTrue(state.getBoolean("files_match"));assertEquals("LF",state.getJSONObject("cache_identity").getString("newline"));
+        assertTrue(new String(PatchFormat.bytes(cache,1024),StandardCharsets.UTF_8).startsWith("https://cdn.example/android\nserver-etag\n"));
+        assertEquals(5,engine().restore(root,(t,n)->{}).getInt("restored_count"));assertEquals(before,hashes());
+    }
+    @Test public void unsupportedCacheNeverCommitsAnyGameTarget()throws Exception{
+        PatchFormat.write(new File(root,"manifest.ssra.etag"),utf("unsupported cache"));Map<String,String> before=hashes();
+        try{engine().apply(root,new ByteArrayInputStream(zip),(t,n)->{});fail();}catch(CacheIdentity.Unsupported expected){}
+        assertEquals(before,hashes());assertFalse(new File(root,".czn_viethoa/state.json").exists());assertFalse(new File(root,".czn_viethoa/journal.json").exists());
+    }
+
     @Test public void realNativeReadbackFixture()throws Exception{
         String baseline=System.getenv("CZN_TEST_BASELINE"),bundle=System.getenv("CZN_TEST_BUNDLE"),output=System.getenv("CZN_TEST_OUTPUT");Assume.assumeNotNull(baseline,bundle,output);File testRoot=new File(output);assertFalse("Do not overwrite previous evidence",testRoot.exists());testRoot.mkdirs();for(String rel:PatchFormat.ALLOWED){File f=new File(baseline,rel);if(f.exists()){File t=PatchFormat.safe(testRoot,rel);t.getParentFile().mkdirs();Files.copy(f.toPath(),t.toPath());}}PatchEngine real=new PatchEngine(Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));try(InputStream in=new FileInputStream(bundle)){assertTrue(real.apply(testRoot,in,(s,n)->{}).getBoolean("success"));}System.out.println("Native verification output: "+testRoot);
     }

@@ -1,0 +1,209 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:czn_patcher/main.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  Map<String, dynamic> result = {}, receipt = {}, scan = {};
+  final calls = <String>[];
+  setUp(() {
+    receipt = {};
+    scan = {'success': true};
+    calls.clear();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('vn.czn.viethoa/progress'),
+          (call) async => null,
+        );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('vn.czn.viethoa/patcher'),
+          (call) async {
+            calls.add(call.method);
+            switch (call.method) {
+              case 'status':
+                return {
+                  'package': 'com.smilegate.chaoszero.stove.google',
+                  'accessGranted': true,
+                };
+              case 'bundledInfo':
+                return {
+                  'version': '1.4.1',
+                  'version_code': 10401,
+                  'changelog': '',
+                };
+              case 'cachedChannel':
+                return <String, dynamic>{};
+              case 'lastOperation':
+                return receipt;
+              case 'checkUpdate':
+                throw PlatformException(code: 'OFFLINE');
+              case 'scanGame':
+                return scan;
+              case 'installBundled':
+                receipt = {
+                  ...result,
+                  'action': 'installBundled',
+                  'phase': result['success'] == true ? 'completed' : 'failed',
+                };
+                return result;
+              default:
+                return true;
+            }
+          },
+        );
+  });
+  tearDown(() {
+    for (final name in ['vn.czn.viethoa/patcher', 'vn.czn.viethoa/progress']) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(MethodChannel(name), null);
+    }
+  });
+  Future<void> install(
+    WidgetTester tester, {
+    String label = 'Cài tiếng Việt',
+  }) async {
+    await tester.pumpWidget(const CznPatcherApp());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(label), 200);
+    await tester.ensureVisible(find.text(label));
+    await tester.pumpAndSettle();
+    final button = find.ancestor(
+      of: find.text(label),
+      matching: find.byWidgetPredicate((w) => w is FilledButton),
+    );
+    expect(
+      tester.widget<FilledButton>(button).onPressed,
+      isNotNull,
+      reason: calls.toString(),
+    );
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+    expect(calls, contains('installBundled'));
+    for (var n = 0; n < 5; n++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  testWidgets('Cache failure is explicit and survives refresh/reopening', (
+    tester,
+  ) async {
+    result = {
+      'success': false,
+      'message': 'Cache game chưa sẵn sàng.',
+      'error_code': 'CACHE_FORMAT_UNSUPPORTED',
+    };
+    await install(tester);
+    expect(find.text('Chưa cài được Việt hóa'), findsOneWidget);
+    expect(find.text('Sao chép lỗi'), findsOneWidget);
+    await tester.tap(find.text('Đóng'));
+    await tester.pumpAndSettle();
+    expect(
+      (tester.widget<Icon>(find.byKey(const Key('step-3-status')))).icon,
+      isNot(Icons.check_circle),
+    );
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const CznPatcherApp());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('operation-result')), findsOneWidget);
+    expect(find.text('Cache game chưa sẵn sàng.'), findsWidgets);
+  });
+  testWidgets('Verified post-install hashes show success and step three done', (
+    tester,
+  ) async {
+    result = {
+      'success': true,
+      'version': '1.4.1',
+      'version_code': 10401,
+      'post_install': {
+        'success': true,
+        'files_match': true,
+        'installed_version': '1.4.1',
+        'installed_code': 10401,
+        'recovery_required': false,
+      },
+    };
+    await install(tester);
+    expect(find.text('Cài Việt hóa thành công'), findsOneWidget);
+    await tester.tap(find.text('Đóng'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step-3-status')),
+      150,
+    );
+    expect(
+      tester.widget<Icon>(find.byKey(const Key('step-3-status'))).icon,
+      Icons.check_circle,
+    );
+  });
+  testWidgets('A success response without matching files is not marked done', (
+    tester,
+  ) async {
+    result = {
+      'success': true,
+      'version_code': 10401,
+      'post_install': {
+        'success': true,
+        'files_match': false,
+        'installed_version': '1.4.1',
+        'installed_code': 10401,
+      },
+    };
+    await install(tester);
+    expect(find.text('Chưa cài được Việt hóa'), findsOneWidget);
+    expect(find.textContaining('Dữ liệu sau cài chưa khớp'), findsWidgets);
+  });
+  testWidgets('Failed readback clears the previous installed tick', (
+    tester,
+  ) async {
+    scan = {
+      'success': true,
+      'files_match': true,
+      'installed_version': '1.4.0',
+      'installed_code': 10400,
+    };
+    result = {
+      'success': false,
+      'message': 'Đọc lại thất bại',
+      'post_install': {
+        'success': true,
+        'files_match': false,
+        'installed_version': '1.4.0',
+        'installed_code': 10400,
+      },
+    };
+    await install(tester, label: 'Cập nhật bản dịch');
+    expect(find.text('Chưa cài được Việt hóa'), findsOneWidget);
+    await tester.tap(find.text('Đóng'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step-3-status')),
+      150,
+    );
+    expect(
+      tester.widget<Icon>(find.byKey(const Key('step-3-status'))).icon,
+      isNot(Icons.check_circle),
+    );
+  });
+  testWidgets('Recovery journal prevents green installed tick', (tester) async {
+    scan = {
+      'success': true,
+      'files_match': true,
+      'installed_version': '1.4.1',
+      'installed_code': 10401,
+      'recovery_required': true,
+    };
+    await tester.pumpWidget(const CznPatcherApp());
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('step-3-status')),
+      150,
+    );
+    expect(
+      tester.widget<Icon>(find.byKey(const Key('step-3-status'))).icon,
+      isNot(Icons.check_circle),
+    );
+  });
+}

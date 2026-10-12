@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  Map<String, dynamic> _status = {}, _game = {};
+  Map<String, dynamic> _status = {}, _game = {}, _lastOperation = {};
   ReleaseInfo? _bundled, _remote;
   bool _busy = false, _checking = false, _downloading = false;
   String _message = 'Đang chuẩn bị ứng dụng…', _onlineMessage = '';
@@ -63,8 +64,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       setState(() {
         _status = status;
         _bundled = bundle;
-        _message = 'Sẵn sàng';
+        if (_lastOperation.isEmpty) _message = 'Sẵn sàng';
       });
+      try {
+        final last = await NativeBridge.map('lastOperation');
+        if (mounted && last.isNotEmpty) {
+          setState(() {
+            _lastOperation = last;
+            _message =
+                last['message'] as String? ??
+                (last['success'] == true
+                    ? 'Lần cài gần nhất đã được xác minh.'
+                    : 'Lần cài gần nhất chưa hoàn tất.');
+          });
+        }
+      } catch (_) {}
       try {
         final cache = await NativeBridge.map('cachedChannel');
         if (cache.containsKey('patch_code') && mounted) {
@@ -106,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _remote = channel;
             final appNew =
                 (channel.data['app_code'] as int? ?? 0) >
-                (_status['appCode'] as int? ?? 10401);
+                (_status['appCode'] as int? ?? 10402);
             final patchNew =
                 channel.code >
                 (_game['installed_code'] as int? ?? _bundled?.code ?? 0);
@@ -142,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final notice = CommunityNotice.fromChannel(
       data != null && data.containsKey('notice') ? data : _bundled?.data ?? {},
     );
-    if (!mounted || _noticeOpen || notice == null) return;
+    if (!mounted || _busy || _noticeOpen || notice == null) return;
     if (!force &&
         (!_noticeRequested && _noticeShown == notice.id ||
             notice.isSnoozed(_status, DateTime.now()))) {
@@ -208,17 +222,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _run(
     Future<Map<String, dynamic>> Function() operation, {
     bool scanGame = true,
+    String action = 'install',
   }) async {
-    if (_busy) return;
+    if (_busy || _checking) return;
     setState(() {
       _busy = true;
       _progress = 0;
       _message = 'Đang chuẩn bị…';
     });
+    var finished = false;
+    Map<String, dynamic> response = {};
     final subscription = NativeBridge.progress.receiveBroadcastStream().listen((
       event,
     ) {
-      if (mounted) {
+      if (mounted && !finished) {
         final data = Map<String, dynamic>.from(event as Map);
         setState(() {
           _message = data['label'] as String;
@@ -226,38 +243,115 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     }, onError: (_) {});
+    bool success = false;
     try {
-      final response = await operation();
+      response = await operation();
+      final post = response['post_install'];
+      final game = !scanGame
+          ? _game
+          : post is Map
+          ? Map<String, dynamic>.from(post)
+          : await NativeBridge.map('scanGame');
+      if (mounted && scanGame) setState(() => _game = game);
       if (response['success'] != true) {
         throw Exception(response['message'] ?? 'Thao tác chưa hoàn tất.');
       }
-      final game = scanGame ? await NativeBridge.map('scanGame') : _game;
+      if (scanGame && game['success'] != true) {
+        throw Exception(
+          game['message'] ?? 'Không đọc lại được dữ liệu sau thao tác. Chưa xác nhận thành công.',
+        );
+      }
+      if (action == 'install' &&
+          (game['files_match'] != true ||
+              (game['installed_version'] as String? ?? '').isEmpty ||
+              ((game['installed_code'] as int?) ?? 0) <= 0 ||
+              game['recovery_required'] == true ||
+              (response['version_code'] != null &&
+                  game['installed_code'] != response['version_code']) ||
+              (response['version'] != null &&
+                  game['installed_version'] != response['version']))) {
+        throw Exception(
+          'Dữ liệu sau cài chưa khớp bản dịch. Chưa xác nhận cài thành công. Bấm Sao chép lỗi để gửi báo cáo.',
+        );
+      }
+      finished = true;
+      success = true;
       if (mounted) {
         setState(() {
           _game = game;
           _message =
               response['message'] as String? ??
-              (response.containsKey('version')
-                  ? 'Đã cài tiếng Việt ${response['version']}. Chọn 日本語 trong game.'
+              (action == 'install'
+                  ? 'Cài thành công bản ${game['installed_version']}. Dữ liệu sau cài đã khớp. Chọn 日本語 trong game.'
                   : 'Đã khôi phục đầy đủ dữ liệu trước cài.');
           _progress = 1;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _message = _error(e));
+      finished = true;
+      if (mounted) {
+        setState(() {
+          _message = _error(e);
+          if (scanGame && response['post_install'] is! Map) _game = {};
+        });
+      }
     } finally {
-      await subscription.cancel();
+      finished = true;
+      unawaited(subscription.cancel().catchError((Object _) {}));
+      Map<String, dynamic> last = {};
+      try {
+        if (action != 'appUpdate') {
+          last = await NativeBridge.map('lastOperation');
+        }
+      } catch (_) {}
       if (mounted) {
         try {
           _status = await NativeBridge.map('status');
         } catch (_) {}
-      }
-      if (mounted) {
         setState(() {
+          _lastOperation = {
+            ...last,
+            ...response,
+            'action': action,
+            'phase': success ? 'completed' : 'failed',
+            'success': success,
+            'message': _message,
+          };
           _busy = false;
           _downloading = false;
         });
       }
+    }
+    if (mounted) {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => AlertDialog(
+          title: Text(
+            success
+                ? (action == 'install'
+                      ? 'Cài Việt hóa thành công'
+                      : action == 'restore'
+                      ? 'Đã khôi phục bản gốc'
+                      : 'Đã mở trình cài APK')
+                : action == 'install'
+                ? 'Chưa cài được Việt hóa'
+                : 'Thao tác chưa hoàn tất',
+          ),
+          content: SingleChildScrollView(child: Text(_message)),
+          actions: [
+            if (!success)
+              TextButton(
+                onPressed: _copyReport,
+                child: const Text('Sao chép lỗi'),
+              ),
+            FilledButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
     }
   }
 
@@ -324,22 +418,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ],
       ),
     );
-    if (confirm == true) await _run(() => NativeBridge.map('restore'));
+    if (confirm == true) {
+      await _run(() => NativeBridge.map('restore'), action: 'restore');
+    }
   }
 
   Future<void> _updateApp() async {
     final release = _remote;
     if (release == null) return;
-    await _run(() async {
-      setState(() => _downloading = true);
-      final path = await NativeBridge.download(release.data, apk: true);
-      if (mounted) setState(() => _downloading = false);
-      await NativeBridge.action('installApp', {'path': path});
-      return {
-        'success': true,
-        'message': 'Đã mở trình cài cập nhật ứng dụng. Xác nhận trên màn hình Android.',
-      };
-    }, scanGame: false);
+    await _run(
+      () async {
+        setState(() => _downloading = true);
+        final path = await NativeBridge.download(release.data, apk: true);
+        if (mounted) setState(() => _downloading = false);
+        await NativeBridge.action('installApp', {'path': path});
+        return {
+          'success': true,
+          'message': 'Đã mở trình cài cập nhật ứng dụng. Xác nhận trên màn hình Android.',
+        };
+      },
+      scanGame: false,
+      action: 'appUpdate',
+    );
   }
 
   Future<void> _settings() async {
@@ -411,9 +511,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Clipboard.setData(
       ClipboardData(
         text: const JsonEncoder.withIndent('  ').convert({
-          'app': _status['appVersion'] ?? '1.4.1',
+          'app': _status['appVersion'] ?? '1.4.2',
           'status': _status,
           'game': _game,
+          'lastOperation': _lastOperation,
           'message': _message,
         }),
       ),
@@ -441,6 +542,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(
+                key: Key('step-$n-status'),
                 done ? Icons.check_circle : Icons.radio_button_unchecked,
                 color: done ? const Color(0xFF34D399) : Colors.white54,
               ),
@@ -466,11 +568,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final access = _status['accessGranted'] == true;
-    final installed =
-        _game['files_match'] == true && _game['installed_version'] != null;
     final recovery =
         _game['recovery_required'] == true ||
         _status['recoveryPending'] == true;
+    final installed =
+        _game['success'] == true &&
+        _game['files_match'] == true &&
+        (_game['installed_version'] as String? ?? '').isNotEmpty &&
+        ((_game['installed_code'] as int?) ?? 0) > 0 &&
+        !recovery;
     final latest =
         _remote != null && (_bundled == null || _remote!.code >= _bundled!.code)
         ? _remote
@@ -494,7 +600,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           IconButton(
             tooltip: 'Cài đặt cập nhật',
-            onPressed: _busy ? null : _settings,
+            onPressed: _busy || _checking ? null : _settings,
             icon: const Icon(Icons.settings_outlined),
           ),
         ],
@@ -512,6 +618,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             style: TextStyle(color: Colors.white70, height: 1.5),
           ),
           const SizedBox(height: 20),
+          if (_lastOperation.isNotEmpty && !_busy)
+            Card(
+              key: const Key('operation-result'),
+              color: _lastOperation['success'] == true
+                  ? const Color(0xFF16372E)
+                  : const Color(0xFF482A25),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _lastOperation['phase'] == 'running'
+                          ? 'Lần cài trước chưa có kết quả xác minh'
+                          : 'Kết quả thao tác gần nhất',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_lastOperation['message'] as String? ?? _message),
+                    if (_lastOperation['success'] != true)
+                      TextButton(
+                        onPressed: _copyReport,
+                        child: const Text('Sao chép lỗi cài đặt'),
+                      ),
+                  ],
+                ),
+              ),
+            ),
           if (installed)
             Card(
               color: const Color(0xFF16372E),
@@ -578,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                         )
                         .toList(),
-                    onChanged: _busy
+                    onChanged: _busy || _checking
                         ? null
                         : (pkg) async {
                             await NativeBridge.action('selectGame', {
@@ -589,7 +723,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           },
                   ),
                 OutlinedButton.icon(
-                  onPressed: _busy
+                  onPressed: _busy || _checking
                       ? null
                       : () async {
                           try {
@@ -642,6 +776,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             FilledButton.icon(
               onPressed:
                   _busy ||
+                      _checking ||
                       _bundled == null ||
                       _status['package'] == null ||
                       _game['success'] != true ||
@@ -685,12 +820,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             runSpacing: 8,
             children: [
               OutlinedButton.icon(
-                onPressed: _busy ? null : _local,
+                onPressed: _busy || _checking ? null : _local,
                 icon: const Icon(Icons.folder_open),
                 label: const Text('Cài từ gói tải sẵn'),
               ),
               OutlinedButton.icon(
-                onPressed: _busy || !access ? null : _restore,
+                onPressed: _busy || _checking || !access ? null : _restore,
                 icon: const Icon(Icons.restore),
                 label: Text(recovery ? 'Phục hồi giao dịch' : 'Khôi phục gốc'),
               ),
@@ -714,7 +849,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   (_status['appCode'] as int? ?? 10400)) ...[
             const SizedBox(height: 12),
             FilledButton.tonal(
-              onPressed: _busy ? null : _updateApp,
+              onPressed: _busy || _checking ? null : _updateApp,
               child: const Text('Cập nhật ứng dụng'),
             ),
           ],
@@ -751,7 +886,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         context: context,
                         applicationName: 'CZN Việt Hóa',
                         applicationVersion:
-                            _status['appVersion'] as String? ?? '1.4.1',
+                            _status['appVersion'] as String? ?? '1.4.2',
                       ),
                       child: const Text('Giấy phép thư viện'),
                     ),
@@ -767,7 +902,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           const SizedBox(height: 16),
           const Center(
             child: Text(
-              'CZN Việt Hóa · 1.4.1',
+              'CZN Việt Hóa · 1.4.2',
               style: TextStyle(color: Colors.white38),
             ),
           ),
