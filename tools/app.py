@@ -235,7 +235,7 @@ def main():
     p.add_argument('--result', type=Path)
     p.add_argument('--no-elevate', action='store_true', help=argparse.SUPPRESS)
     group = p.add_mutually_exclusive_group()
-    for action in ('sync', 'build', 'install', 'restore', 'status', 'ui-smoke', 'android-check'):
+    for action in ('sync', 'build', 'install', 'restore', 'status', 'ui-smoke', 'android-check', 'android-notice', 'capture-history'):
         group.add_argument('--' + action, action='store_true')
     group.add_argument('--import-file', type=Path)
     args = p.parse_args()
@@ -249,7 +249,14 @@ def main():
             print(message, flush=True)
 
     try:
-        if args.android_check:
+        if args.capture_history:
+            from change_history import capture
+            result = capture(home)
+        elif args.android_notice:
+            from android_sync import check_updates
+            from change_history import notice_preview
+            result = {'notice': notice_preview(home, check_updates())}
+        elif args.android_check:
             from android_sync import check_updates
             result = check_updates()
         elif args.ui_smoke:

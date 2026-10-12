@@ -1,4 +1,4 @@
-param([string]$OutputName = 'CZN_VietHoa_v1_3_1')
+param([string]$OutputName = 'CZN_VietHoa_v1_3_2')
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $previousPythonPath = $env:PYTHONPATH

@@ -42,7 +42,13 @@ def make_bundle(source,target,out,version,code,signer):
     with zipfile.ZipFile(bundle,'w',compression=zipfile.ZIP_STORED) as z:
         z.writestr('release.json',envelope)
         for name,data in payloads.items():z.writestr(name,data)
+    # Private readback snapshot: release notices and receipts must refer to these exact bytes.
+    from change_history import snapshot_from_tables
+    snapshot=snapshot_from_tables(translated_db,translated_story,original_db,original_story)
+    snapshot_path=out/'TRANSLATION_SNAPSHOT.json'
+    snapshot_path.write_text(json.dumps(snapshot,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
     evidence=dict(text_changes=len(changed),text_token_errors=0,story_changes=story_changes,native_readback=True,story_non_jp_fields_identical=True,outside_jp_slots_identical=True,bundle_bytes=bundle.stat().st_size,bundle_sha256=sha(bundle.read_bytes()),source_manifest_sha256=sha(source.data),target_manifest_sha256=sha(target.data),android_runtime='pending_device_verification')
+    evidence['translation_snapshot_sha256']=sha(snapshot_path.read_bytes())
     (out/'PACKAGE_EVIDENCE.json').write_text(json.dumps(evidence,ensure_ascii=False,indent=2),encoding='utf-8')
     return bundle,evidence
 def main():

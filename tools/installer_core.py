@@ -12,7 +12,7 @@ import uuid
 
 from czn_format import Archive, Database, FormatError, validate_translation, xxhash
 
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 IDENTITY_FILES = ('manifest.ssra.etag', 'manifest.ssra.prev')
 LEGACY_MANIFESTS = {
     '45a0093589720c98ac0e9b91bd711f26ce34b74d0d5db4fe21f21aa141edce15',
@@ -75,7 +75,8 @@ def atomic_bytes(path, data):
 
 
 def write_json(path, data):
-    atomic_bytes(path, json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'))
+    from change_history import tracked_write
+    tracked_write(path, json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8'), atomic_bytes)
 
 
 def read_json(path, default=None):
@@ -551,6 +552,7 @@ class Installer:
         if imported and any(r.get('file', '').startswith('db/story_') for r in imported):
             from story_localization import import_story
             return import_story(ar, self.home, imported)
+        catalog_before = self.catalog_file.read_bytes()
         catalog = self.catalog()
         by_id = {x['id']: x for x in catalog['entries']}
         accepted, rejected, seen = {}, [], set()
@@ -583,6 +585,8 @@ class Installer:
             if r['reason'] == 'ID trùng trong file nhập':
                 accepted.pop(r['id'], None)
         if accepted:
+            if self.catalog_file.read_bytes() != catalog_before:
+                raise RuntimeError('Catalog đã đổi trong lúc kiểm tra bản nhập. Nhập lại từ catalog mới.')
             backup = self.data / 'catalog_backups' / (time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:6] + '.json')
             atomic_bytes(backup, self.catalog_file.read_bytes())
             by_id.update(accepted)

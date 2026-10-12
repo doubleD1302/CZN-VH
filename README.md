@@ -31,9 +31,11 @@ Thông báo khi mở app có nút **Tắt** và **Tắt trong 24 giờ**. Bấm 
 Bản 1.5.1 đã qua analyzer, 22 kiểm thử Flutter và 29 kiểm thử native. Không chạy giả lập trong đợt này theo yêu cầu; thao tác và gameplay trên điện thoại thật vẫn chờ người chơi kiểm chứng.
 
 <details>
-<summary>Dành cho người phát hành từ PC 1.3.1</summary>
+<summary>Dành cho người phát hành từ PC 1.3.2</summary>
 
 Trong bộ cài PC hiện có, chọn **Đồng bộ Android / GitHub** để dựng, kiểm tra và phát hành bản dịch kèm thông báo. Xem [hướng dẫn đầy đủ](https://github.com/doubleD1302/CZN-VH/releases/latest/download/HUONG_DAN_ANDROID.txt). Tệp EXE thay thế cần thư mục dự án PC có sẵn dữ liệu bản dịch.
+
+PC 1.3.2 nhận các cách nhập `1.5`, `v1.5.0`, `1.5.0.` và chuẩn hóa thành `1.5.0`. Kiểm tra cập nhật giữ số tự nhập; release đã dùng số đó sẽ được báo riêng. Thông báo tự tổng hợp những mục dịch chưa phát hành, rồi đối chiếu với gói thực tế khi dựng. Ghi chú thêm nằm trong ô riêng. Xem [cách lưu dấu vết từng đợt](docs/translation-history.md).
 
 Đợt chỉ đổi APK dùng `tools/publish_android_release.py --app-only`: xác thực kênh cũ, giữ mọi metadata bản dịch, ký kênh APK mới và chỉ phát hành khi có bằng chứng đúng hash. Người chơi nhận cập nhật từ app.
 

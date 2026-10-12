@@ -6,8 +6,26 @@ HOME=Path(__file__).resolve().parents[1]
 class SyncTests(unittest.TestCase):
  def test_version_no_ambiguity(self):
   self.assertEqual(sync.version_code('1.4.2'),10402)
-  for bad in ['1.4','1.4.100','bad','1.3.0']:
+  for alias in ['1.5','1.5.0.','v1.5.0','  V01.05.00  ','1.5.']:
+   self.assertEqual(sync.normalize_version(alias),'1.5.0')
+   self.assertEqual(sync.version_code(alias),10500)
+  for bad in ['1.4.100','bad','1.3.0','1.5..','1.5.0.1','1..5','-1.5.0','1.5 beta','1,5','999999999.0.0']:
    with self.assertRaises(ValueError):sync.version_code(bad)
+ def test_suggestion_avoids_app_only_tag(self):
+  self.assertEqual(sync.suggested_version({'patch_code':10402,'app_code':10501}),'1.5.2')
+  self.assertEqual(sync.suggested_version({'patch_code':10599,'app_code':10501}),'1.6.0')
+ def test_used_app_only_tag_has_specific_error(self):
+  with patch.object(sync,'fetch',return_value=b'{}'):
+   with self.assertRaisesRegex(ValueError,'đã có release'):sync.validate_new_version('1.5.',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501})
+ def test_older_version_rejected_before_tag_request(self):
+  with patch.object(sync,'fetch') as fetch:
+   with self.assertRaisesRegex(ValueError,'cao hơn'):sync.validate_new_version('1.4.2',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501})
+   fetch.assert_not_called()
+ def test_unused_alias_is_normalized_for_filename_tag_and_code(self):
+  import urllib.error
+  with patch.object(sync,'fetch',side_effect=urllib.error.HTTPError('https://fixture',404,'missing',{},None)):
+   self.assertEqual(sync.validate_new_version('1.5.2.',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501}),('1.5.2',10502))
+ @unittest.skipUnless((HOME/'czn_android_patcher/.signing/update-private.pk8').is_file(),'Khóa ký CZN chỉ có trên máy phát hành; không đưa vào CI.')
  def test_signature_roundtrip_and_altered_metadata_rejected(self):
   with tempfile.TemporaryDirectory() as temp:
    raw=Path(temp)/'channel.json';raw.write_text('{"schema":1,"notice":{"enabled":true,"body":"Thử thông báo"}}',encoding='utf-8')

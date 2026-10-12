@@ -53,6 +53,23 @@ def main():
   channel=dict(schema=1,type='channel',patch_version=args.version,patch_code=args.code,patch_url=url+bundle.name,patch_size=bundle.stat().st_size,patch_sha256=digest(bundle),app_version=app_version,app_code=app_code,app_url=url+apk.name,app_size=apk.stat().st_size,app_sha256=digest(apk),changelog='Bản cộng đồng: cài qua Shizuku, backup/rollback, cập nhật có chữ ký và bản dịch JP đi kèm.')
  if args.notice:
   channel['notice']=json.loads(args.notice.read_text('utf-8'))
+ if not args.app_only:
+  # Derive notices from the exact signed payload, rather than today's catalog totals.
+  from android_sync import check_updates
+  from change_history import capture,ensure_baseline,read_bundle_snapshot,changes_since_publication,notice_text,CATALOGS
+  capture(P);ensure_baseline(P,check_updates())
+  snapshot=read_bundle_snapshot(bundle,channel)
+  for domain,name in CATALOGS.items():
+   catalog=json.loads((P/'data'/name).read_text('utf-8-sig'))
+   snapshot['eligible'][domain]=[r['id'] for r in catalog['entries'] if r.get('text_vi') and r.get('text_vi')!=r.get('source_ja') and snapshot['values'][domain].get(r['id'])==r['text_vi']]
+  delta=changes_since_publication(P,snapshot);automatic=notice_text(delta)
+  manual=channel.get('notice',{}).get('body','').strip()
+  body=automatic+('\n\n'+manual if manual else '')
+  if len(body)>12000:raise ValueError('Thông báo vượt 12.000 ký tự; rút gọn ghi chú.')
+  channel['changelog']=body
+  channel['notice']={'enabled':True,'id':tag+'-translations','title':channel.get('notice',{}).get('title') or 'CZN Việt Hóa có bản cập nhật','body':body}
+  (out/'TRANSLATION_SNAPSHOT.json').write_text(json.dumps(snapshot,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+  (out/'UNPUBLISHED_CHANGES.json').write_text(json.dumps(delta,ensure_ascii=False,indent=2),encoding='utf-8')
  raw=out/'channel.descriptor.json';raw.write_text(json.dumps(channel,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
  from android_sync import verify_metadata
  signed=out/'channel.json'
@@ -64,6 +81,9 @@ def main():
   if args.pc_exe.suffix.lower()!='.exe':raise ValueError('Only the PC executable may be added')
   assets.append(args.pc_exe)
  sums=out/'SHA256SUMS.txt';sums.write_text(''.join(digest(f)+'  '+f.name+'\n' for f in assets),encoding='utf-8');assets.append(sums)
+ if not args.app_only:
+  trace_preview={'home':str(P),'directory':str(out),'tag':tag,'asset_hashes':{f.name:digest(f) for f in assets},'translation_snapshot_sha256':digest(out/'TRANSLATION_SNAPSHOT.json')}
+  (out/'TRANSLATION_PREVIEW.json').write_text(json.dumps(trace_preview,ensure_ascii=False,indent=2),encoding='utf-8')
  if not args.publish:print(json.dumps({'prepared':True,'assets':[f.name for f in assets],'tag':tag}));return
  # Require actual check results and a new release; never overwrite remote assets.
  evidence=json.loads((out/'FINAL_VERIFICATION.json').read_text('utf-8'))
@@ -87,6 +107,10 @@ def main():
   result=api(token,upload+'?name='+quote(f.name),method='POST',body=f.read_bytes(),binary=True)
   if result['size']!=f.stat().st_size or result.get('digest')!='sha256:'+digest(f):raise RuntimeError('Upload size/SHA256 mismatch')
  release=api(token,base+'/releases/'+str(release['id']),method='PATCH',body={'draft':False,'make_latest':'true'})
+ if not args.app_only:
+  from android_sync import finalize_publication
+  receipt=finalize_publication(trace_preview,channel,release['id'],token)
+  (out/'TRANSLATION_RECEIPT.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2),encoding='utf-8')
  record={'url':release['html_url'],'tag':tag,'id':release['id'],'assets':[{x['name']:x['browser_download_url']} for x in api(token,base+'/releases/'+str(release['id']))['assets']]}
  (out/'PUBLISHED_RELEASE.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8');print(json.dumps({'published':True,'url':record['url']}))
 if __name__=='__main__':main()
