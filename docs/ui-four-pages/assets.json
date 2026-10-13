@@ -1,0 +1,315 @@
+{
+  "schema": 1,
+  "tool": "built-in image_gen",
+  "approved_references": [
+    {
+      "path": "docs/ui-four-pages/approved/01-thiet-lap.png",
+      "sha256": "e6c384bab1ef3c5fcff5107e864870ae1cd7bf4775f5b81a5344646b08cb1a16",
+      "size": 1926316
+    },
+    {
+      "path": "docs/ui-four-pages/approved/02-cap-nhat.png",
+      "sha256": "4f864171168f767ac66509c6cedcb98931769ec6e266e1d7edb04b1c3d038b52",
+      "size": 1953512
+    },
+    {
+      "path": "docs/ui-four-pages/approved/03-thong-bao.png",
+      "sha256": "2aa855ba57122efc6eddcf5388ae9eb1bcb60bab5fc460b9c34f9606b1f05dcb",
+      "size": 1933011
+    },
+    {
+      "path": "docs/ui-four-pages/approved/04-cai-dat.png",
+      "sha256": "c6dc2a7f09b4208423f067bdebcecfce3394190f2593370ae398785265f4de6c",
+      "size": 1854970
+    }
+  ],
+  "assets": [
+    {
+      "asset": "tools_type.png",
+      "sha256": "94181061ca6c9641f51bed8d5be52fe10e5a1482faabd7bbd270df08570b2e52",
+      "dimensions": [
+        1122,
+        1402
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "regions": [
+        [
+          0.21390374331550802,
+          0.03138373751783167,
+          0.5721925133689839,
+          0.11198288159771755
+        ],
+        [
+          0.23796791443850268,
+          0.16476462196861627,
+          0.5294117647058824,
+          0.09343794579172611
+        ],
+        [
+          0.1889483065953654,
+          0.28031383737517834,
+          0.6265597147950089,
+          0.08131241084165478
+        ],
+        [
+          0.2985739750445633,
+          0.3958630527817404,
+          0.40730837789661317,
+          0.09415121255349501
+        ],
+        [
+          0.25935828877005346,
+          0.5085592011412268,
+          0.48663101604278075,
+          0.06704707560627675
+        ],
+        [
+          0.20231729055258468,
+          0.5898716119828816,
+          0.5998217468805704,
+          0.06704707560627675
+        ],
+        [
+          0.3181818181818182,
+          0.6783166904422254,
+          0.37344028520499106,
+          0.05920114122681883
+        ],
+        [
+          0.45098039215686275,
+          0.7631954350927247,
+          0.09893048128342247,
+          0.04850213980028531
+        ],
+        [
+          0.29233511586452765,
+          0.8402282453637661,
+          0.4180035650623886,
+          0.05563480741797432
+        ],
+        [
+          0.3253119429590018,
+          0.9194008559201141,
+          0.3591800356506239,
+          0.05420827389443652
+        ]
+      ],
+      "file_kept_byte_exact": true,
+      "prompt": "Use case: precise-object-edit / UI asset extraction.\nThe input images are the four approved Android interface mockups. Produce a clean reusable TRANSPARENT PNG atlas matching their exact visual language. Preserve the champagne/ivory metallic outlines, muted navy glass, restrained crimson accents, and fine ornamental diamonds. NO wallpaper, characters, phone frames, labels other than explicitly requested text, watermark, sheet background or baked checkerboard. The PNG outside each object must genuinely have alpha 0. Keep each atlas cell perfectly aligned to a regular grid and inside its own cell, with equal gutters. This is a production asset used in Flutter, not a new screen design.\nExtract/recreate the EXACT classic elegant serif letterforms of the approved titles and capsule labels. Output one portrait atlas with TEN equal-height horizontal rows, width:height approximately 4:5. Every row has a single line centered, generous transparent padding for Vietnamese accents. All rows use the SAME serif font family and consistent ivory/champagne text style; NO button frames, rules, icons or other decoration. Preserve correct Vietnamese spelling verbatim.\nRows top to bottom:\n1 \"THIẾT LẬP\"\n2 \"CẬP NHẬT\"\n3 \"THÔNG BÁO\"\n4 \"CÀI ĐẶT\"\n5 \"CÀI TIẾNG VIỆT\"\n6 \"KIỂM TRA CẬP NHẬT\"\n7 \"LƯU CÀI ĐẶT\"\n8 \"Tắt\"\n9 \"Tắt trong 24 giờ\"\n10 \"Khôi phục gốc\"\nRows1-4 should precisely match the high contrast classical serif uppercase page headings in input screens; rows5-7 same serif as the burgundy capsule buttons; rows8-10 same serif in the quiet action buttons/restore link. These are readable typeset glyphs with antialiased transparent edges, not hand lettering. No misspelled accents or substitutions."
+    },
+    {
+      "asset": "tools_icons.png",
+      "sha256": "2c2306038a911408d0d9572cdb550ec372ee7a785f57bc232965b5d90fa1af0e",
+      "dimensions": [
+        1254,
+        1254
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "regions": [
+        [
+          0.05582137161084529,
+          0.07496012759170653,
+          0.1682615629984051,
+          0.17065390749601275
+        ],
+        [
+          0.3022328548644338,
+          0.08771929824561403,
+          0.15550239234449761,
+          0.15311004784688995
+        ],
+        [
+          0.5566188197767146,
+          0.08532695374800638,
+          0.13078149920255183,
+          0.16267942583732056
+        ],
+        [
+          0.7910685805422647,
+          0.0861244019138756,
+          0.15550239234449761,
+          0.15629984051036683
+        ],
+        [
+          0.05582137161084529,
+          0.3237639553429027,
+          0.17145135566188197,
+          0.14832535885167464
+        ],
+        [
+          0.2942583732057416,
+          0.3277511961722488,
+          0.17145135566188197,
+          0.12759170653907495
+        ],
+        [
+          0.5470494417862839,
+          0.3229665071770335,
+          0.14912280701754385,
+          0.14832535885167464
+        ],
+        [
+          0.7894736842105263,
+          0.3309409888357257,
+          0.16666666666666666,
+          0.14035087719298245
+        ],
+        [
+          0.04784688995215311,
+          0.5271132376395534,
+          0.18261562998405104,
+          0.18819776714513556
+        ],
+        [
+          0.30303030303030304,
+          0.5350877192982456,
+          0.15550239234449761,
+          0.1722488038277512
+        ],
+        [
+          0.5374800637958532,
+          0.539872408293461,
+          0.1850079744816587,
+          0.17384370015948963
+        ],
+        [
+          0.7942583732057417,
+          0.5614035087719298,
+          0.15550239234449761,
+          0.14035087719298245
+        ],
+        [
+          0.05980861244019139,
+          0.7878787878787878,
+          0.17065390749601275,
+          0.14433811802232854
+        ],
+        [
+          0.31259968102073366,
+          0.766347687400319,
+          0.14114832535885166,
+          0.17543859649122806
+        ],
+        [
+          0.5677830940988836,
+          0.7822966507177034,
+          0.09011164274322168,
+          0.14992025518341306
+        ],
+        [
+          0.7902711323763956,
+          0.7799043062200957,
+          0.15550239234449761,
+          0.1547049441786284
+        ]
+      ],
+      "file_kept_byte_exact": true,
+      "prompt": "Use case: precise-object-edit / UI asset extraction.\nThe input images are the four approved Android interface mockups. Produce a clean reusable TRANSPARENT PNG atlas matching their exact visual language. Preserve the champagne/ivory metallic outlines, muted navy glass, restrained crimson accents, and fine ornamental diamonds. NO wallpaper, characters, phone frames, labels other than explicitly requested text, watermark, sheet background or baked checkerboard. The PNG outside each object must genuinely have alpha 0. Keep each atlas cell perfectly aligned to a regular grid and inside its own cell, with equal gutters. This is a production asset used in Flutter, not a new screen design.\nOutput a SQUARE atlas, exactly FOUR columns by FOUR rows, 16 ivory/champagne flat line glyphs matching the actual reference UI. These are glyphs ONLY, no surrounding circles/frames, no captions. Uniform stroke thickness, each symbol centered at identical scale in its cell, alpha0 background.\nGrid row1 left to right: ornate key with circular bow; two circular update arrows; bell; six-tooth gear.\nGrid row2: hollow heart; Wi-Fi fan with dot; three stacked diamond layers; folder with small checkmark.\nGrid row3: four-point install diamond rune; simple three-dimensional cube/package; two small translation letter tiles A and 文; speech bubble with three dots.\nGrid row4: photo frame with mountain; document outline with download arrow; clean left chevron; circular restore arrow.\nCopy shapes and cream/gold coloring from the mockups, especially the large key, Wi-Fi, heart, gear, notification bell, cube, and file download icons. No glow clouds or raster checker background."
+    },
+    {
+      "asset": "tools_panels.png",
+      "sha256": "d490ad2f162e7505a23201fc2e99fb0b5d31b6291df1406f2e19aa2501d2b956",
+      "dimensions": [
+        1024,
+        1536
+      ],
+      "alpha_extrema": [
+        0,
+        254
+      ],
+      "regions": [
+        [
+          0.029296875,
+          0.028645833333333332,
+          0.94140625,
+          0.212890625
+        ],
+        [
+          0.029296875,
+          0.2669270833333333,
+          0.94140625,
+          0.220703125
+        ],
+        [
+          0.029296875,
+          0.5130208333333334,
+          0.94140625,
+          0.21809895833333334
+        ],
+        [
+          0.01171875,
+          0.7532552083333334,
+          0.9765625,
+          0.19791666666666666
+        ]
+      ],
+      "file_kept_byte_exact": true,
+      "prompt": "Use case: precise-object-edit / UI asset extraction.\nThe input images are the four approved Android interface mockups. Produce a clean reusable TRANSPARENT PNG atlas matching their exact visual language. Preserve the champagne/ivory metallic outlines, muted navy glass, restrained crimson accents, and fine ornamental diamonds. NO wallpaper, characters, phone frames, labels other than explicitly requested text, watermark, sheet background or baked checkerboard. The PNG outside each object must genuinely have alpha 0. Keep each atlas cell perfectly aligned to a regular grid and inside its own cell, with equal gutters. This is a production asset used in Flutter, not a new screen design.\nOutput a portrait transparent atlas containing FOUR equal horizontal rows. Each row is a wide empty rectangular FRAME with aspect 2:1, centered, frame border near cell edges, equal cell gutters. Entire interior is TRANSPARENT (no glass/background/text) so Flutter can put dynamic contents under it. Thin champagne metallic border and restrained delicate corner detail exactly in reference UI.\nTop row0: simple softly rounded rectangle with a single fine gold border, like the three setup step panels.\nRow1: thin rounded rectangular frame with small folded leaf/diamond corner ornaments, like the two update version panels.\nRow2: notice panel frame with inward notched top-right/bottom-left corners and fine double corner arcs as in the notification panel, elegantly restrained.\nRow3: preference panel frame with rounded corners and small tiny ornamental diamonds protruding at the middle of left and right edges, as in settings rows.\nNo text, no icons, no full dark fills, no multicolor effects. All four frames use matching metallic thickness. Keep straight top/bottom/side stretches plain so a nine-slice renderer can resize them."
+    },
+    {
+      "asset": "tools_buttons.png",
+      "sha256": "3fb56de8dea9e2bd921b7c3363e03f9e5268afab2ac741187861c4c58efa5390",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "regions": [
+        [
+          0.058624577226606536,
+          0.1939120631341601,
+          0.8821871476888388,
+          0.2750845546786922
+        ],
+        [
+          0.05975197294250282,
+          0.5366403607666291,
+          0.8804960541149943,
+          0.28635851183765504
+        ]
+      ],
+      "file_kept_byte_exact": true,
+      "prompt": "Use case: precise-object-edit / UI asset extraction.\nThe input images are the four approved Android interface mockups. Produce a clean reusable TRANSPARENT PNG atlas matching their exact visual language. Preserve the champagne/ivory metallic outlines, muted navy glass, restrained crimson accents, and fine ornamental diamonds. NO wallpaper, characters, phone frames, labels other than explicitly requested text, watermark, sheet background or baked checkerboard. The PNG outside each object must genuinely have alpha 0. Keep each atlas cell perfectly aligned to a regular grid and inside its own cell, with equal gutters. This is a production asset used in Flutter, not a new screen design.\nOutput a landscape PNG atlas of TWO horizontal rows, overall width:height2:1. Each row contains a wide empty capsule button aspect4:1. Transparent outside capsules; no text or icons.\nRow0 TOP: quiet secondary button from Settings Hủy / Notification Tắt: smoky navy translucent fill with subtle glass gradient, thin champagne outline, small diamond tips at left/right, no glow.\nRow1 BOTTOM: primary button from KIỂM TRA CẬP NHẬT / LƯU CÀI ĐẶT: deep burgundy glass gradient, fine warm ivory/gold double outline, soft restrained amber glow, tiny metallic diamond/point end ornaments. Empty calm center for dynamic label.\nStraight middle sections must be simple to allow three-slice horizontal resizing without stretching end decorations. Match reference buttons closely; not the older bulky red/bronze buttons."
+    },
+    {
+      "asset": "tools_rings.png",
+      "sha256": "257f6c70ec83152533f8881cc2754a743cf16e3bfe795afcdc49e42b95829fb8",
+      "dimensions": [
+        1774,
+        887
+      ],
+      "alpha_extrema": [
+        0,
+        255
+      ],
+      "regions": [
+        [
+          0.02874859075535513,
+          0.0552423900789177,
+          0.44532130777903045,
+          0.8703494926719278
+        ],
+        [
+          0.5248027057497181,
+          0.05411499436302142,
+          0.447576099210823,
+          0.8703494926719278
+        ]
+      ],
+      "file_kept_byte_exact": true,
+      "prompt": "Use case: precise-object-edit / UI asset extraction.\nThe input images are the four approved Android interface mockups. Produce a clean reusable TRANSPARENT PNG atlas matching their exact visual language. Preserve the champagne/ivory metallic outlines, muted navy glass, restrained crimson accents, and fine ornamental diamonds. NO wallpaper, characters, phone frames, labels other than explicitly requested text, watermark, sheet background or baked checkerboard. The PNG outside each object must genuinely have alpha 0. Keep each atlas cell perfectly aligned to a regular grid and inside its own cell, with equal gutters. This is a production asset used in Flutter, not a new screen design.\nOutput landscape transparent PNG, exactly TWO square cells side by side, width:height2:1. Each cell is an EMPTY circular navigation bezel with no central symbol.\nCell0 LEFT: unselected icon ring, thin double champagne outline, smoky translucent navy circular center, tiny diamonds at12/3/6/9oclock, subtle metallic shine, no bright halo.\nCell1 RIGHT: selected ring from highlighted footer buttons, same geometry, brighter warm cream rim and restrained amber/crimson halo, fine end ornaments. Empty center so an icon can be overlaid.\nKeep both rings same diameter, centered in identical square cells, alpha0 outside. Do not add a rectangular sheet or text."
+    }
+  ],
+  "qa": "user_waived_for_this_task",
+  "no_raster_editing": true,
+  "validation_after_final_edits": "not_run_per_user_request"
+}

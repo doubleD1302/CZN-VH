@@ -1,0 +1,34 @@
+{
+  "TINOS_PROVENANCE.json": [
+    {
+      "file": "assets/fonts/Tinos-Bold.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Bold.ttf",
+      "sha256": "393269dbab8899f938db19783eca5eac92eb431f7ae0ab45b8349ca895f1a06b",
+      "bytes": 597880
+    },
+    {
+      "file": "assets/fonts/Tinos-Regular.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/tinos/Tinos-Regular.ttf",
+      "sha256": "60a0e8ef0c04dd5dd69ffe91025fa2ae5836cbd35600a82ba031977557e2cb61",
+      "bytes": 521588
+    }
+  ],
+  "TINOS_LICENSE_PROVENANCE.json": {
+    "source": "https://raw.githubusercontent.com/googlefonts/tinos/3b4482a99b80ea5fc75f187b1be3120a3f5905b3/OFL.txt",
+    "sha256": "cb3382d4643e8b02c12e322c220a3c76a5020d667e4fd4e7c75e744cca6caa6b"
+  },
+  "NOTOSANS_PROVENANCE.json": [
+    {
+      "file": "assets/fonts/NotoSans.ttf",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf",
+      "sha256": "bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d",
+      "bytes": 2049096
+    },
+    {
+      "file": "assets/fonts/Notosans_LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosans/OFL.txt",
+      "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+      "bytes": 4396
+    }
+  ]
+}

@@ -14,13 +14,13 @@ class CznToolsBackdrop extends StatelessWidget {
           child: ClipRect(
             child: BackdropFilter(
               key: const Key('tools-blurred-background'),
-              filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+              filter: ui.ImageFilter.blur(sigmaX: 3, sigmaY: 3),
               child: const DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xB0101420), Color(0xCD23101A)],
+                    colors: [Color(0x75101420), Color(0x7D23101A)],
                   ),
                 ),
               ),

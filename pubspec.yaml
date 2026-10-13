@@ -74,6 +74,14 @@ flutter:
     - family: CznLogo
       fonts:
         - asset: assets/fonts/RobotoCondensed.ttf
+    - family: CznDisplay
+      fonts:
+        - asset: assets/fonts/Tinos-Regular.ttf
+        - asset: assets/fonts/Tinos-Bold.ttf
+          weight: 700
+    - family: CznSans
+      fonts:
+        - asset: assets/fonts/NotoSans.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

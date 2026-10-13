@@ -37,6 +37,16 @@ Future<void> main() async {
       'Roboto Condensed',
     ], await rootBundle.loadString('assets/fonts/RobotoCondensed_OFL.txt'));
   });
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Tinos',
+    ], await rootBundle.loadString('assets/fonts/Tinos_LICENSE.txt'));
+  });
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Noto Sans',
+    ], await rootBundle.loadString('assets/fonts/Notosans_LICENSE.txt'));
+  });
   runApp(const CznPatcherApp());
 }
 
