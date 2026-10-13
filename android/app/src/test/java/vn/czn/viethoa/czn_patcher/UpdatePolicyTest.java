@@ -44,4 +44,17 @@ public class UpdatePolicyTest {
         assertThrows(Exception.class,()->identity("vn.czn.viethoa.community",10502,"1.5.2",new String[]{"different-cert"}));
         assertThrows(Exception.class,()->identity("vn.czn.viethoa.community",10502,"1.5.2",new String[]{}));
     }
+    @Test public void appAndPatchUpdatesAreIndependent() throws Exception {
+        JSONObject both = channel();
+        assertTrue(UpdatePolicy.hasAppUpdate(both, 10501));
+        assertTrue(UpdatePolicy.hasPatchUpdate(both, 10401));
+        assertFalse(UpdatePolicy.hasPatchUpdate(both, 10402));
+        assertTrue(UpdatePolicy.hasAppUpdate(both, 10501));
+        assertFalse(UpdatePolicy.hasAppUpdate(both, 10502));
+        assertTrue(UpdatePolicy.hasPatchUpdate(both, 10401));
+    }
+    @Test public void invalidPatchVersionDoesNotMasqueradeAsUpdate() throws Exception {
+        assertThrows(Exception.class, () -> UpdatePolicy.hasPatchUpdate(channel().put("patch_code", 0), 10400));
+        assertThrows(Exception.class, () -> UpdatePolicy.hasPatchUpdate(channel().put("patch_code", 2147483648L), 10400));
+    }
 }

@@ -143,6 +143,8 @@ void main() {
       await tester.pumpWidget(const CznPatcherApp());
       await tester.pumpAndSettle();
       expect(checked, true);
+      await tester.tap(find.byKey(const Key('open-setup')));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('Kiểm tra lại dữ liệu game'),
         150,
@@ -205,6 +207,8 @@ void main() {
     gate.complete(release);
     await tester.pumpAndSettle();
     expect(scans, 2);
+    await tester.tap(find.byKey(const Key('open-setup')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('step-2-status')),
       150,

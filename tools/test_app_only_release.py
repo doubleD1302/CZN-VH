@@ -1,4 +1,7 @@
 import unittest
+import io,contextlib
+from unittest.mock import patch
+import publish_android_release as publisher
 from publish_android_release import app_only_channel
 
 class AppOnlyReleaseTest(unittest.TestCase):
@@ -20,5 +23,11 @@ class AppOnlyReleaseTest(unittest.TestCase):
         for field,value in [('schema',2),('type','release')]:
             with self.assertRaises(ValueError):
                 app_only_channel({**self.baseline,field:value},'1.5.1',10501,'https://example.com/new.apk',1,'b'*64)
+
+    def test_prepare_only_cannot_be_combined_with_publish(self):
+        with patch('sys.argv',['release','--prepare-only','--publish']),patch.object(publisher,'api') as api,patch.object(publisher,'credentials') as credentials,contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:publisher.main()
+            self.assertEqual(error.exception.code,2)
+            api.assert_not_called();credentials.assert_not_called()
 
 if __name__ == '__main__':unittest.main()

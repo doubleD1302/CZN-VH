@@ -15,7 +15,7 @@ class SyncUITests(unittest.TestCase):
             app=SimpleNamespace(tk=tk,ttk=ttk,root=root,home=Path(temp),busy=False,buttons=[],
                                 game_var=tk.StringVar(master=root,value=temp),filedialog=Mock(),messagebox=Mock())
             channel={'patch_version':'1.4.3','patch_code':10403,'app_version':'1.5.1','app_code':10501,'changelog':'fixture'}
-            with patch('android_sync_ui.check_updates',return_value=channel),patch('android_sync_ui.notice_preview',return_value='5 mục Việt hóa mới'):
+            with patch('android_sync_ui.check_updates',return_value=channel),patch('android_sync_ui.notice_preview_data',return_value={'text':'5 mục Việt hóa mới','changes':[]}):
                 win=show_android_sync(app);win.withdraw()
                 def children(widget):
                     result=[]
@@ -34,7 +34,7 @@ class SyncUITests(unittest.TestCase):
                     time.sleep(.01)
                 self.assertEqual(entries[0].get(),'1.6')
                 self.assertEqual(manual.get('1.0','end-1c'),'Ghi chú người dùng')
-                automatic=next(w for w in widgets if isinstance(w,tk.Text) and str(w.cget('height'))=='6')
+                automatic=next(w for w in widgets if isinstance(w,tk.Text) and str(w.cget('height'))=='8')
                 self.assertEqual(automatic.get('1.0','end-1c'),'5 mục Việt hóa mới')
                 self.assertEqual(str(automatic.cget('state')),'disabled')
                 entries[0].event_generate('<FocusOut>');root.update()

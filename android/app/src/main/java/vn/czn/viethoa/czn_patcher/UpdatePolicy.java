@@ -27,6 +27,12 @@ public final class UpdatePolicy {
         return data.getInt("app_code") > installedCode;
     }
 
+    public static boolean hasPatchUpdate(JSONObject data, int installedCode) throws Exception {
+        long code = data.getLong("patch_code");
+        if (code <= 0 || code > Integer.MAX_VALUE) throw new IOException("Mã bản dịch không hợp lệ.");
+        return code > installedCode;
+    }
+
     public static void sameDownload(JSONObject requested, JSONObject trusted, boolean apk) throws Exception {
         String kind = apk ? "app" : "patch";
         if (!requested.getString(kind + "_sha256").equals(trusted.getString(kind + "_sha256"))

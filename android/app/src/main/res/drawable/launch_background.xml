@@ -1,5 +1,5 @@
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:drawable="@color/czn_background"/>
     <item android:width="88dp" android:height="88dp" android:gravity="center"
-        android:drawable="@drawable/ic_czn_foreground"/>
+        android:drawable="@drawable/ic_launcher_czn_foreground"/>
 </layer-list>

@@ -2,7 +2,7 @@
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:windowSplashScreenBackground">@color/czn_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_czn_foreground</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_czn_foreground</item>
         <item name="android:statusBarColor">@color/czn_background</item>
         <item name="android:navigationBarColor">@color/czn_background</item>
         <item name="android:windowLightStatusBar">false</item>

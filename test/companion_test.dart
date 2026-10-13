@@ -21,6 +21,10 @@ void main() {
   testWidgets('Dragging saves position and reopening restores it', (
     tester,
   ) async {
+    SharedPreferences.setMockInitialValues({
+      'companion_x': .92,
+      'companion_y': .5,
+    });
     await tester.pumpWidget(screen());
     await tester.pumpAndSettle();
     final sprite = find.byKey(const Key('floating-companion'));

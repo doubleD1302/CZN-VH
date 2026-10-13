@@ -10,39 +10,16 @@ class CznMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
-    child: CustomPaint(size: Size.square(size), painter: const _MarkPainter()),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(size * .18),
+      child: Image.asset(
+        'assets/app_icon.png',
+        width: size,
+        height: size,
+        filterQuality: FilterQuality.high,
+      ),
+    ),
   );
-}
-
-class _MarkPainter extends CustomPainter {
-  const _MarkPainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    final ring = Paint()
-      ..color = CznColors.red
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * .07;
-    canvas.drawArc(
-      rect.deflate(size.width * .18),
-      .35,
-      math.pi * 1.45,
-      false,
-      ring,
-    );
-    final slash = Path()
-      ..moveTo(size.width * .62, size.height * .09)
-      ..lineTo(size.width * .35, size.height * .55)
-      ..lineTo(size.width * .52, size.height * .53)
-      ..lineTo(size.width * .36, size.height * .91)
-      ..lineTo(size.width * .72, size.height * .40)
-      ..lineTo(size.width * .54, size.height * .42)
-      ..close();
-    canvas.drawPath(slash, Paint()..color = CznColors.text);
-  }
-
-  @override
-  bool shouldRepaint(_MarkPainter oldDelegate) => false;
 }
 
 class CznHero extends StatelessWidget {

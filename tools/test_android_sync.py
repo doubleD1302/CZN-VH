@@ -16,7 +16,7 @@ class SyncTests(unittest.TestCase):
   self.assertEqual(sync.suggested_version({'patch_code':10599,'app_code':10501}),'1.6.0')
  def test_used_app_only_tag_has_specific_error(self):
   with patch.object(sync,'fetch',return_value=b'{}'):
-   with self.assertRaisesRegex(ValueError,'đã có release'):sync.validate_new_version('1.5.',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501})
+   with self.assertRaisesRegex(ValueError,'đã có release'):sync.validate_new_version('1.5.2',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501})
  def test_older_version_rejected_before_tag_request(self):
   with patch.object(sync,'fetch') as fetch:
    with self.assertRaisesRegex(ValueError,'cao hơn'):sync.validate_new_version('1.4.2',{'patch_code':10402,'patch_version':'1.4.2','app_code':10501})

@@ -112,14 +112,16 @@ class HistoryTests(unittest.TestCase):
     def publication_fixture(self):
         self.save(self.row());self.baseline()
         out=self.home/'release';out.mkdir()
-        names=['CZN_Android_v1.5.2.cznpatch','channel.json','HUONG_DAN_ANDROID.txt','SHA256SUMS.txt']
+        names=['CZN_Android_v1.5.2.cznpatch','CZN_VietHoa_Android_v1.5.2.apk','channel.json','HUONG_DAN_ANDROID.txt','SHA256SUMS.txt']
         for name in names:(out/name).write_bytes(b'fixture')
         frozen={'values':{'text':{'id':'Bản dịch'},'story':{}},'eligible':{'text':['id'],'story':[]}}
         (out/'TRANSLATION_SNAPSHOT.json').write_text(json.dumps(frozen),encoding='utf-8')
         (out/'UNPUBLISHED_CHANGES.json').write_text('{}')
-        channel=dict(self.channel,patch_version='1.5.2',patch_code=10502,patch_sha256=sync.digest(out/names[0]))
-        preview={'home':str(self.home),'directory':str(out),'version':'1.5.2','code':10502,'tag':'android-v1.5.2',
-                 'asset_hashes':{n:sync.digest(out/n) for n in names},'app':{},
+        channel=dict(self.channel,patch_version='1.5.2',patch_code=10502,patch_sha256=sync.digest(out/names[0]),app_code=10502,app_sha256=sync.digest(out/names[1]))
+        (out/'APP_BUILD_EVIDENCE.json').write_text(json.dumps({'code':10502,'version':'1.5.2','apk_sha256':channel['app_sha256']}))
+        preview={'schema':2,'home':str(self.home),'directory':str(out),'version':'1.5.2','code':10502,'tag':'android-v1.5.2',
+                 'asset_hashes':{n:sync.digest(out/n) for n in names},'app':{'app_code':10502,'app_sha256':channel['app_sha256']},
+                 'app_build_evidence_sha256':sync.digest(out/'APP_BUILD_EVIDENCE.json'),
                  'translation_snapshot_sha256':sync.digest(out/'TRANSLATION_SNAPSHOT.json'),
                  'unpublished_changes_sha256':sync.digest(out/'UNPUBLISHED_CHANGES.json')}
         release={'id':42,'tag_name':preview['tag'],'draft':False,'prerelease':False,'html_url':'https://fixture/release',
@@ -136,7 +138,7 @@ class HistoryTests(unittest.TestCase):
         out,channel,preview,release=self.publication_fixture()
         (out/'PUBLISH_STATE.json').write_text(json.dumps({'release_id':42,'url':release['html_url'],'state':'uploading'}))
         self.save(self.row('Sửa tiếp sau khi dựng'))
-        with patch.object(sync,'check_updates',return_value=channel),patch.object(sync,'verify_metadata',return_value=channel),patch.object(sync,'credentials',return_value='fixture'),patch.object(sync,'api',return_value=release) as api:
+        with patch.object(sync,'check_updates',return_value=channel),patch.object(sync,'verify_metadata',return_value=channel),patch.object(sync,'credentials',return_value='fixture'),patch('app_package.assert_current_source'),patch.object(sync,'api',return_value=release) as api:
             result=sync.publish(preview)
             self.assertEqual(result['state'],'verified')
             api.assert_called_once_with('fixture','/releases/42')

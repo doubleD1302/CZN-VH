@@ -45,7 +45,7 @@ class AppUpdateCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Cập nhật ứng dụng',
+                      'Cập nhật toàn bộ ứng dụng',
                       style: TextStyle(
                         color: CznColors.text,
                         fontSize: 16,
@@ -71,10 +71,10 @@ class AppUpdateCard extends StatelessWidget {
               message.isNotEmpty
                   ? message
                   : update != null
-                  ? 'Có phiên bản mới. Tải tại đây và xác nhận cập nhật trên màn hình Android.'
+                  ? 'Bao gồm giao diện, icon, chức năng và gói đi kèm. Xác nhận cài APK để nhận đầy đủ thay đổi.'
                   : checking
                   ? 'Đang kiểm tra phiên bản mới…'
-                  : 'App tự kiểm tra khi mở. Bản mới được tải và cài trực tiếp từ đây.',
+                  : 'App tự kiểm tra khi mở; khi bật Wi-Fi tự tải, cả APK và bản dịch đều được tải sẵn.',
             ),
           ),
           if (updating) ...[

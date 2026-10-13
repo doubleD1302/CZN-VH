@@ -211,6 +211,8 @@ def ensure_baseline(home, channel):
 def changes_since_publication(home, snapshot=None):
     db = connect(home)
     try:
+        # Keep baseline, published rows and observed rows from one SQLite snapshot.
+        db.execute('BEGIN')
         baseline = db.execute('SELECT value FROM state WHERE key="baseline"').fetchone()
         if not baseline:
             raise RuntimeError('Chưa có gói nền đã xác thực. Bấm Kiểm tra cập nhật để lấy thay đổi chưa phát hành.')
@@ -228,7 +230,10 @@ def changes_since_publication(home, snapshot=None):
                 continue
             result.append({'domain': domain, 'id': identity, 'group': group_name(domain, row),
                            'kind': 'new' if before is None or before == row.get('source_ja') else 'edited',
-                           'before': before, 'after': value, 'after_sha256': sha(value.encode())})
+                           'before': before, 'after': value, 'after_sha256': sha(value.encode()),
+                           'source_ja': row.get('source_ja', row.get('text_ja', '')),
+                           'reference_en': row.get('reference_en', row.get('text_en', '')),
+                           'metadata': {k: row[k] for k in ('scene', 'talker', 'name_override', 'file') if k in row}})
         # Catalog removals/reverts are announced only when the built payload actually reverts that exact VI.
         if snapshot is not None:
             seen = set()
@@ -243,7 +248,29 @@ def changes_since_publication(home, snapshot=None):
                 target = snapshot['values'][domain].get(identity)
                 if target == old.get('source_ja') and published.get(key) == old.get('text_vi') and target != old.get('text_vi'):
                     result.append({'domain': domain, 'id': identity, 'group': group_name(domain, old),
-                                   'kind': 'removed', 'before': old['text_vi'], 'after': target, 'after_sha256': sha(target.encode())})
+                                   'kind': 'removed', 'before': old['text_vi'], 'after': target, 'after_sha256': sha(target.encode()),
+                                   'source_ja': old.get('source_ja', old.get('text_ja', '')),
+                                   'reference_en': old.get('reference_en', old.get('text_en', '')),
+                                   'metadata': {k: old[k] for k in ('scene', 'talker', 'name_override', 'file') if k in old}})
+            # Also capture regressions for rows still in catalog whose target native value reverted to source_ja
+            announced_ids = {(r['domain'], r['id']) for r in result}
+            for (domain, identity), before_val in published.items():
+                key = domain, identity
+                if key in announced_ids:
+                    continue
+                row = observed.get(key)
+                if not row:
+                    continue
+                source_ja = row.get('source_ja', row.get('text_ja', ''))
+                if not before_val or before_val == source_ja:
+                    continue
+                target = snapshot['values'][domain].get(identity)
+                if target == source_ja and target != before_val:
+                    result.append({'domain': domain, 'id': identity, 'group': group_name(domain, row),
+                                   'kind': 'removed', 'before': before_val, 'after': target, 'after_sha256': sha(target.encode()),
+                                   'source_ja': source_ja,
+                                   'reference_en': row.get('reference_en', row.get('text_en', '')),
+                                   'metadata': {k: row[k] for k in ('scene', 'talker', 'name_override', 'file') if k in row}})
         return {'baseline_version': json.loads(baseline[0])['patch_version'], 'changes': result}
     finally:
         db.close()
@@ -257,26 +284,25 @@ def group_name(domain, row):
             return 'Thiết lập và âm thanh'
         return re.sub(r'\s*\(Phase\s*\d+\)', '', category)
     match = re.search(r'_(ch\d+|tuto)', row.get('scene', row['id']))
-    return 'Cốt truyện · ' + (('Chương ' + str(int(match[1][2:]))) if match and match[1].startswith('ch') else 'Hướng dẫn')
+    return 'Cốt truyện · ' + (('Chương ' + str(int(match[1][2:]))) if match and match[1].startswith('ch') else ('Hướng dẫn' if match and match[1] == 'tuto' else 'Chưa xác định chương'))
 
-def notice_text(delta):
-    changes = delta['changes']
-    if not changes:
-        return 'Không có thay đổi bản dịch so với bản đã phát hành ' + delta['baseline_version'] + '.'
-    kinds = Counter(c['kind'] for c in changes)
-    lines = ['Thay đổi bản dịch kể từ bản ' + delta['baseline_version'] + ':',
-             f"{kinds['new']:,} mục Việt hóa mới; {kinds['edited']:,} mục chỉnh sửa; {kinds['removed']:,} mục ngừng áp dụng."]
-    groups = Counter(c['group'] for c in changes)
-    for group, count in sorted(groups.items(), key=lambda p: (-p[1], p[0]))[:30]:
-        lines.append(f'• {group}: {count:,} mục.')
-    if len(groups) > 30:
-        lines.append(f'• {len(groups) - 30} nhóm khác: {sum(sorted(groups.values(), reverse=True)[30:]):,} mục.')
-    return '\n'.join(lines)
+def notice_text(delta, context=None):
+    from player_changelog import model
+    return model(delta, context)['text']
 
-def notice_preview(home, channel):
+
+def notice_preview_data(home, channel):
+    from player_changelog import for_home, model
     capture(home)
     ensure_baseline(home, channel)
-    return notice_text(changes_since_publication(home))
+    delta = changes_since_publication(home)
+    context = for_home(home, delta) if delta['changes'] else None
+    return model(delta, context)
+
+
+def notice_preview(home, channel):
+    return notice_preview_data(home, channel)['text']
+
 
 def main():
     parser = argparse.ArgumentParser(description='Lưu dấu vết thay đổi catalog CZN, không ghi game.')

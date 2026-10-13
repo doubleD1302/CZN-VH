@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'czn_raster.dart';
+
 abstract final class CznColors {
-  static const background = Color(0xFF0B0D11);
-  static const panel = Color(0xFF15181E);
-  static const border = Color(0xFF30343D);
+  static const background = Color(0xFF0D141E);
+  static const panel = Color(0xFF192331);
+  static const border = Color(0xFF3C4A5B);
   static const red = Color(0xFFFF5B62);
-  static const muted = Color(0xFFADB2BD);
+  static const muted = Color(0xFFB7C3D1);
   static const text = Color(0xFFF2F0EA);
   static const green = Color(0xFF83DCC2);
   static const amber = Color(0xFFEAC187);
@@ -33,7 +35,9 @@ abstract final class CznTheme {
         );
     final base = ThemeData(useMaterial3: true, colorScheme: scheme);
     return base.copyWith(
-      scaffoldBackgroundColor: CznColors.background,
+      scaffoldBackgroundColor: Colors.transparent,
+      canvasColor: Colors.transparent,
+      cardColor: const Color(0xBE171824),
       textTheme: base.textTheme.copyWith(
         headlineSmall: const TextStyle(
           fontSize: 26,
@@ -59,7 +63,9 @@ abstract final class CznTheme {
         ),
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: CznColors.background,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         foregroundColor: CznColors.text,
         centerTitle: false,
@@ -72,31 +78,53 @@ abstract final class CznTheme {
       ),
       cardTheme: const CardThemeData(
         margin: EdgeInsets.zero,
-        color: CznColors.panel,
+        color: Color(0xBE171824),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(12)),
-          side: BorderSide(color: CznColors.border),
+          side: BorderSide(color: Color(0x66FFE6CB)),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(0, 52),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          shape: shape,
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-        ),
+        style:
+            FilledButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              foregroundColor: const Color(0xFFFFE6CB),
+              side: BorderSide.none,
+              minimumSize: const Size(0, 52),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              shape: const StadiumBorder(),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ).copyWith(
+              backgroundBuilder: (context, states, child) => Opacity(
+                opacity: states.contains(WidgetState.disabled) ? .4 : 1,
+                child: CznButtonArt(child: child ?? const SizedBox.expand()),
+              ),
+            ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: CznColors.text,
-          minimumSize: const Size(0, 48),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          side: const BorderSide(color: CznColors.border),
-          shape: shape,
-          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
+        style:
+            OutlinedButton.styleFrom(
+              foregroundColor: CznColors.text,
+              backgroundColor: Colors.transparent,
+              minimumSize: const Size(0, 48),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              side: BorderSide.none,
+              shape: shape,
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ).copyWith(
+              backgroundBuilder: (context, states, child) => Opacity(
+                opacity: states.contains(WidgetState.disabled) ? .4 : 1,
+                child: CznButtonArt(child: child ?? const SizedBox.expand()),
+              ),
+            ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -105,7 +133,7 @@ abstract final class CznTheme {
         ),
       ),
       dialogTheme: const DialogThemeData(
-        backgroundColor: CznColors.panel,
+        backgroundColor: Color(0xE6171824),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.all(Radius.circular(16)),

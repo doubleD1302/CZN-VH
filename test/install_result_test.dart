@@ -68,6 +68,8 @@ void main() {
   }) async {
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-setup')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text(label), 200);
     await tester.ensureVisible(find.text(label));
     await tester.pumpAndSettle();
@@ -108,6 +110,8 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
     await tester.pumpWidget(const CznPatcherApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-setup')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('operation-result')),
@@ -202,6 +206,8 @@ void main() {
       'recovery_required': true,
     };
     await tester.pumpWidget(const CznPatcherApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-setup')));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('step-3-status')),

@@ -94,6 +94,8 @@ void main() {
   Future<void> update(WidgetTester tester) async {
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('open-updates')));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.byKey(const Key('app-update-button')),
       180,
@@ -140,6 +142,8 @@ void main() {
       offline = true;
       await tester.pumpWidget(const CznPatcherApp());
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('open-updates')));
+      await tester.pumpAndSettle();
       expect(calls, contains('resumeAppUpdate'));
       expect(calls, isNot(contains('downloadApp')));
       expect(pending, false);
@@ -156,7 +160,11 @@ void main() {
       await tester.tap(find.text('Đóng'));
       await tester.pumpAndSettle();
       failedDownload = false;
-      await tester.ensureVisible(find.byKey(const Key('app-update-button')));
+      await Scrollable.ensureVisible(
+        tester.element(find.byKey(const Key('app-update-button'))),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('app-update-button')));
       await tester.pumpAndSettle();
       expect(calls, contains('installApp'));
@@ -175,6 +183,20 @@ void main() {
     expect(calls, contains('installApp'));
     expect(tester.takeException(), isNull);
   });
+  testWidgets(
+    'Home update installs the whole app before touching translation data',
+    (tester) async {
+      await tester.pumpWidget(const CznPatcherApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('landing-primary')));
+      await tester.pumpAndSettle();
+      expect(calls, containsAllInOrder(['downloadApp', 'installApp']));
+      expect(calls, isNot(contains('downloadPatch')));
+      expect(calls, isNot(contains('installPatch')));
+      expect(calls, isNot(contains('requestAccess')));
+    },
+  );
+
   test('Same/older APK or malformed metadata is not offered', () {
     expect(
       AppUpdateInfo.fromChannel({...remote, 'app_code': 10501}, 10501),

@@ -12,7 +12,7 @@ import uuid
 
 from czn_format import Archive, Database, FormatError, validate_translation, xxhash
 
-VERSION = '1.3.2'
+VERSION = '1.3.5'
 IDENTITY_FILES = ('manifest.ssra.etag', 'manifest.ssra.prev')
 LEGACY_MANIFESTS = {
     '45a0093589720c98ac0e9b91bd711f26ce34b74d0d5db4fe21f21aa141edce15',
