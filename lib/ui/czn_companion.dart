@@ -81,7 +81,7 @@ class _CznCompanionState extends State<CznCompanion> {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, bounds) {
       final width = math.min(78.0, math.max(48.0, bounds.maxWidth - 16));
-      final height = width * 336 / 320;
+      final height = width;
       final viewport = Size(bounds.maxWidth, bounds.maxHeight);
       final region =
           (widget.dragRegion?.call(viewport) ??

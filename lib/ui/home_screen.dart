@@ -178,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _remote = channel;
             final appNew =
                 (channel.data['app_code'] as int? ?? 0) >
-                (_status['appCode'] as int? ?? 10610);
+                (_status['appCode'] as int? ?? 10612);
             final patchNew =
                 channel.code >
                 (_game['installed_code'] as int? ?? _bundled?.code ?? 0);
@@ -430,7 +430,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _install() async {
     if (AppUpdateInfo.fromChannel(
           _remote?.data,
-          _status['appCode'] as int? ?? 10610,
+          _status['appCode'] as int? ?? 10612,
         ) !=
         null) {
       await _updateApp();
@@ -509,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (!resume &&
         AppUpdateInfo.fromChannel(
               release?.data,
-              _status['appCode'] as int? ?? 10610,
+              _status['appCode'] as int? ?? 10612,
             ) ==
             null) {
       return;
@@ -686,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await Clipboard.setData(
         ClipboardData(
           text: const JsonEncoder.withIndent('  ').convert({
-            'app': _status['appVersion'] ?? '1.6.10',
+            'app': _status['appVersion'] ?? '1.6.12',
             'error_code':
                 _lastOperation['error_code'] ??
                 _game['error_code'] ??
@@ -866,7 +866,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final appNew =
         AppUpdateInfo.fromChannel(
           _remote?.data,
-          _status['appCode'] as int? ?? 10610,
+          _status['appCode'] as int? ?? 10612,
         ) !=
         null;
     final label = appNew
@@ -901,7 +901,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         onTap: _showCompanionChat,
         child: CznLanding(
           patchVersion: latest?.version ?? 'Đang đọc…',
-          appVersion: _status['appVersion'] as String? ?? '1.6.10',
+          appVersion: _status['appVersion'] as String? ?? '1.6.12',
           access: access,
           ready: ready,
           installed: installed,
@@ -954,7 +954,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         latest.newerThan((_game['installed_code'] as int?) ?? 0);
     final appUpdate = AppUpdateInfo.fromChannel(
       _remote?.data,
-      _status['appCode'] as int? ?? 10610,
+      _status['appCode'] as int? ?? 10612,
     );
     return CznToolsBackdrop(
       child: DefaultTabController(
@@ -1032,7 +1032,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         const CznSectionLabel('CẬP NHẬT TOÀN BỘ'),
                         AppUpdateCard(
                           currentVersion:
-                              _status['appVersion'] as String? ?? '1.6.10',
+                              _status['appVersion'] as String? ?? '1.6.12',
                           update: appUpdate,
                           checking: _checking,
                           updating: _appUpdating,
@@ -1442,7 +1442,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                           'Chaos Zero Nightmare Việt Hóa',
                                       applicationVersion:
                                           _status['appVersion'] as String? ??
-                                          '1.6.10',
+                                          '1.6.12',
                                     ),
                                     child: const Text('Giấy phép thư viện'),
                                   ),
@@ -1459,7 +1459,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const SizedBox(height: 16),
                       Center(
                         child: Text(
-                          'Chaos Zero Nightmare Việt Hóa · ${_status['appVersion'] ?? '1.6.10'}',
+                          'Chaos Zero Nightmare Việt Hóa · ${_status['appVersion'] ?? '1.6.12'}',
                           style: const TextStyle(
                             color: CznColors.muted,
                             fontSize: 11,

@@ -4,7 +4,7 @@ Cài bản dịch tiếng Việt cho **Chaos Zero Nightmare** bằng Shizuku.
 
 ## [⬇ Tải APK mới nhất](https://github.com/doubleD1302/CZN-VH/releases/latest)
 
-Bản **1.6.10** có nền toàn màn hình, logo game kèm cờ Việt Nam và chữ **VI**, nút/icon riêng và màn hình công cụ làm mờ nền. Gói bản dịch đi kèm là **1.6.9**.
+Bản **1.6.12** có nền toàn màn hình, logo game kèm cờ Việt Nam và chữ **VI**, nút/icon riêng và màn hình công cụ làm mờ nền. Gói bản dịch đi kèm là **1.6.11**. Chibi GIF v2 có chuyển động và hiệu ứng trái tim mới; chế độ giảm chuyển động dùng ảnh tĩnh v2.
 
 ## Cài tiếng Việt trong 3 bước
 
@@ -22,7 +22,7 @@ Bật cập nhật nền trong cài đặt để app kiểm tra và tải APK c�
 
 Trong **Thiết lập**, chọn **Khôi phục gốc** để bỏ bản dịch. Nếu app yêu cầu **Phục hồi giao dịch**, hoàn tất trước khi mở game. Game và app cần nằm cùng hồ sơ Android chính.
 
-Bản này đã có analyzer sạch, 33 kiểm thử Flutter và ảnh chạy trên giả lập trước khi chốt. Điện thoại thật và gameplay vẫn chờ người chơi kiểm chứng. Lần push này bỏ qua CI theo yêu cầu dừng test.
+Giao diện trước đợt chibi v2 đã có analyzer sạch, 33 kiểm thử Flutter và ảnh chạy trên giả lập. Đợt 1.6.12 được đối chiếu tài nguyên, build, chữ ký/hash và QA độc lập; không chạy lại test, analyzer hoặc runtime. Điện thoại thật và gameplay vẫn chờ người chơi kiểm chứng. Lần push này bỏ qua CI theo yêu cầu dừng test.
 
 <details>
 <summary>Dành cho người phát hành từ PC</summary>
