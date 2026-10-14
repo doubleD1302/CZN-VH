@@ -811,20 +811,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         : 'Cài tiếng Việt';
     return Scaffold(
       body: CznCompanion(
-        // Keep the sprite in empty artwork, away from faces and actions.
+        // Allow dragging across the screen while keeping the sprite visible.
         dragRegion: (size) {
-          final top = MediaQuery.paddingOf(context).top;
-          if (size.width > size.height) {
-            if (size.height - MediaQuery.paddingOf(context).vertical < 340) {
-              return Rect.zero;
-            }
-            return Rect.fromLTRB(14, top + 88, 160, top + 180);
-          }
+          final padding = MediaQuery.paddingOf(context);
           return Rect.fromLTRB(
-            size.width * .65,
-            top + 62,
+            8,
+            padding.top + 8,
             size.width - 8,
-            top + 172,
+            size.height - padding.bottom - 8,
           );
         },
         visible: _showCompanion && !_busy,
