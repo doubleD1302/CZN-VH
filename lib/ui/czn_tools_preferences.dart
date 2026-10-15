@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../services/native_bridge.dart';
 import '../services/notice_policy.dart';
 import 'czn_tools_design.dart';
 
@@ -210,6 +212,8 @@ class CznToolsSettingsPage extends StatefulWidget {
     required this.busy,
     required this.onSave,
     required this.onCancel,
+    this.companionOverlayVisible = false,
+    this.overlayActive,
   });
 
   final bool companionVisible;
@@ -218,7 +222,9 @@ class CznToolsSettingsPage extends StatefulWidget {
   final String appVersion;
   final String patchVersion;
   final bool busy;
-  final Future<bool> Function(bool companion, bool auto, String channel) onSave;
+  final bool companionOverlayVisible;
+  final bool? overlayActive;
+  final Function onSave;
   final VoidCallback onCancel;
 
   @override
@@ -232,6 +238,7 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
   bool _advanced = false;
   bool _saving = false;
   String? _saveError;
+  bool _overlay = false;
 
   bool get _blocked => widget.busy || _saving;
 
@@ -241,6 +248,86 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
     _companion = widget.companionVisible;
     _auto = widget.autoDownload;
     _channel = TextEditingController(text: widget.channel);
+    _overlay = widget.overlayActive ?? widget.companionOverlayVisible;
+    unawaited(_refreshOverlayState());
+  }
+
+  Future<void> _refreshOverlayState() async {
+    try {
+      final running = await NativeBridge.isChibiOverlayRunning();
+      if (mounted) setState(() => _overlay = running);
+    } catch (_) {}
+  }
+
+  Future<void> _toggleOverlay(bool value) async {
+    if (_blocked) return;
+    try {
+      if (value) {
+        final canDraw = await NativeBridge.canDrawOverlays();
+        if (!canDraw) {
+          if (!mounted) return;
+          final proceed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF161D2B),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: const BorderSide(color: Color(0xCCDBB486), width: 1),
+              ),
+              title: const Text(
+                'Cấp quyền hiển thị Chibi',
+                style: TextStyle(
+                  fontFamily: 'CznDisplay',
+                  color: Color(0xFFF4F2EF),
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: const Text(
+                'Để nhân vật Chibi hiển thị nổi ngoài màn hình điện thoại và trên các ứng dụng khác, vui lòng bật quyền "Hiển thị trên các ứng dụng khác" trong Cài đặt Android.',
+                style: TextStyle(
+                  fontFamily: 'CznSans',
+                  color: Color(0xFFD3C0A7),
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Hủy', style: TextStyle(color: Color(0xFFA3B0C2))),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text(
+                    'MỞ CÀI ĐẶT',
+                    style: TextStyle(
+                      color: Color(0xFFFFB1A8),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+          if (proceed == true) {
+            await NativeBridge.requestOverlayPermission();
+          }
+          return;
+        }
+        await NativeBridge.startChibiOverlay();
+        if (mounted) setState(() => _overlay = true);
+      } else {
+        await NativeBridge.stopChibiOverlay();
+        if (mounted) setState(() => _overlay = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Không thể điều khiển Chibi ngoài màn hình: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -257,7 +344,13 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
       _saveError = null;
     });
     try {
-      final saved = await widget.onSave(_companion, _auto, _channel.text.trim());
+      final dynamic func = widget.onSave;
+      bool saved;
+      try {
+        saved = await (func as dynamic)(_companion, _auto, _channel.text.trim(), _overlay);
+      } catch (_) {
+        saved = await (func as dynamic)(_companion, _auto, _channel.text.trim());
+      }
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -292,6 +385,34 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
             onChanged: _blocked
                 ? null
                 : (value) => setState(() => _companion = value),
+          ),
+        ),
+        const SizedBox(height: 10),
+        CznToolsPanel(
+          variant: 3,
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PreferenceSwitchRow(
+                glyph: CznToolsGlyph16.layers,
+                title: 'Lớp phủ trên ứng dụng khác',
+                subtitle: 'Hiện nhân vật nổi khi mở game hoặc ứng dụng khác.',
+                value: _overlay,
+                onChanged: _blocked ? null : (v) => unawaited(_toggleOverlay(v)),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 9),
+                child: Divider(
+                  height: 1,
+                  thickness: .8,
+                  color: Color(0xA3D3C0A7),
+                ),
+              ),
+              const _InformationLine(
+                text: 'Chạm Chibi để mở app, kéo thả tự do ngoài màn hình.',
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 10),

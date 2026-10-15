@@ -27,4 +27,19 @@ class NativeBridge {
         {'channelJson': jsonEncode(info)},
       ) ??
       '';
+
+  static Future<bool> canDrawOverlays() async =>
+      await channel.invokeMethod<bool>('canDrawOverlays') ?? false;
+
+  static Future<bool> requestOverlayPermission() async =>
+      await channel.invokeMethod<bool>('requestOverlayPermission') ?? false;
+
+  static Future<bool> startChibiOverlay() async =>
+      await channel.invokeMethod<bool>('startChibiOverlay') ?? false;
+
+  static Future<bool> stopChibiOverlay() async =>
+      await channel.invokeMethod<bool>('stopChibiOverlay') ?? false;
+
+  static Future<bool> isChibiOverlayRunning() async =>
+      await channel.invokeMethod<bool>('isChibiOverlayRunning') ?? false;
 }

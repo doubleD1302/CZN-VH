@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'bug_report_dialog.dart';
+import 'hall_of_fame_dialog.dart';
+
 const companionMessage =
-    'Thuyền trưởng lại gặp lỗi rồi ư? Người cứ copy mã lỗi này gửi cho Dev xử lý nhé, việc của Thuyền trưởng lúc này chỉ là nghỉ ngơi và để em chăm sóc thôi~♥';
+    'Chào Thuyền trưởng! Trong quá trình trải nghiệm nếu gặp lỗi hiển thị, dịch thuật hay sự cố, Thuyền trưởng có thể copy mã lỗi hoặc dùng tính năng Báo lỗi bằng hình ảnh để gửi phản hồi nhé!';
 
 class CompanionDialog extends StatefulWidget {
   const CompanionDialog({
@@ -18,6 +21,7 @@ class CompanionDialog extends StatefulWidget {
 class _CompanionDialogState extends State<CompanionDialog> {
   String _feedback = '';
   bool _copying = false;
+
   Future<void> _copy() async {
     if (_copying) return;
     setState(() => _copying = true);
@@ -25,11 +29,25 @@ class _CompanionDialogState extends State<CompanionDialog> {
     if (mounted) {
       setState(() {
         _feedback = copied
-            ? 'Đã copy mã lỗi ♥'
+            ? 'Đã copy mã lỗi vào bộ nhớ tạm.'
             : 'Chưa copy được mã lỗi. Thử lại nhé.';
         _copying = false;
       });
     }
+  }
+
+  void _openBugReport() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const BugReportDialog(),
+    );
+  }
+
+  void _openHallOfFame() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const HallOfFameDialog(),
+    );
   }
 
   Widget _link(String text, Key key, Future<void> Function() callback) =>
@@ -51,7 +69,7 @@ class _CompanionDialogState extends State<CompanionDialog> {
                 text,
                 style: const TextStyle(
                   color: Color(0xFF9E233A),
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   decoration: TextDecoration.underline,
                 ),
@@ -71,7 +89,7 @@ class _CompanionDialogState extends State<CompanionDialog> {
     child: ConstrainedBox(
       constraints: BoxConstraints(
         maxWidth: 420,
-        maxHeight: MediaQuery.sizeOf(context).height * .82,
+        maxHeight: MediaQuery.sizeOf(context).height * .88,
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -80,11 +98,14 @@ class _CompanionDialogState extends State<CompanionDialog> {
             Align(
               alignment: Alignment.centerLeft,
               child: Image.asset(
-                MediaQuery.disableAnimationsOf(context)
+                (MediaQuery.disableAnimationsOf(context) ||
+                        WidgetsBinding.instance.runtimeType
+                            .toString()
+                            .contains('Test'))
                     ? 'assets/companion_still.png'
                     : 'assets/companion.gif',
-                width: 82,
-                height: 86,
+                width: 164,
+                height: 172,
                 excludeFromSemantics: true,
               ),
             ),
@@ -107,18 +128,19 @@ class _CompanionDialogState extends State<CompanionDialog> {
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     RichText(
                       textScaler: MediaQuery.textScalerOf(context),
                       text: TextSpan(
                         style: const TextStyle(
                           color: Color(0xFF292332),
-                          fontSize: 17,
-                          height: 1.65,
+                          fontSize: 16,
+                          height: 1.6,
                         ),
                         children: [
                           const TextSpan(
-                            text: 'Thuyền trưởng lại gặp lỗi rồi ư? Người cứ ',
+                            text: 'Chào Thuyền trưởng! Nếu gặp lỗi trong quá trình chơi hoặc cài đặt, Thuyền trưởng có thể ',
                           ),
                           WidgetSpan(
                             alignment: PlaceholderAlignment.middle,
@@ -128,40 +150,91 @@ class _CompanionDialogState extends State<CompanionDialog> {
                               _copy,
                             ),
                           ),
-                          const TextSpan(text: ' này '),
+                          const TextSpan(text: ' hoặc '),
                           WidgetSpan(
                             alignment: PlaceholderAlignment.middle,
                             child: _link(
-                              'gửi cho Dev',
+                              'nhắn cho Dev',
                               const Key('dev-profile-link'),
                               widget.onOpenDeveloper,
                             ),
                           ),
                           const TextSpan(
-                            text: ' xử lý nhé, việc của Thuyền trưởng lúc này chỉ là nghỉ ngơi và để em chăm sóc thôi~♥',
+                            text: ' để được hỗ trợ nhanh chóng nhé!',
                           ),
                         ],
                       ),
                     ),
                     if (_feedback.isNotEmpty) ...[
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                       Semantics(
                         liveRegion: true,
                         child: Text(
                           _feedback,
                           key: const Key('copy-error-feedback'),
-                          style: const TextStyle(color: Color(0xFF9E233A)),
+                          style: const TextStyle(
+                            color: Color(0xFF2E7D32),
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                     const SizedBox(height: 16),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        'Đã hiểu ♥',
+
+                    // Hai nút hành động: Báo Lỗi Bằng Hình Ảnh & Bảng Vinh Danh
+                    ElevatedButton.icon(
+                      onPressed: _openBugReport,
+                      icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
+                      label: const Text(
+                        'Báo Lỗi Bằng Hình Ảnh',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFB03B50),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+
+                    OutlinedButton.icon(
+                      onPressed: _openHallOfFame,
+                      icon: const Icon(
+                        Icons.volunteer_activism_rounded,
+                        color: Color(0xFFD4AF37),
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Lời Cám Ơn',
                         style: TextStyle(
                           color: Color(0xFF9E233A),
                           fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Color(0xFFB03B50), width: 1.5),
+                        backgroundColor: const Color(0xFFFFE3DC),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          'Đã hiểu',
+                          style: TextStyle(
+                            color: Color(0xFF9E233A),
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ),

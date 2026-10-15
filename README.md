@@ -1,42 +1,43 @@
-# CZN Việt Hóa — Android & Windows Launcher
+# Chaos Zero Nightmare — Bản Dịch Tiếng Việt
 
-🔗 **GitHub Repository:** [https://github.com/doubleD1302/CZN-VH](https://github.com/doubleD1302/CZN-VH)
+Bộ công cụ cài đặt và tự động cập nhật bản dịch tiếng Việt cho tựa game **Chaos Zero Nightmare** (hỗ trợ cả **Android** và **Windows PC**).
 
-Cài bản dịch tiếng Việt cho **Chaos Zero Nightmare** (Hỗ trợ cả Android và Windows PC).
+[⬇ Tải bản cài đặt mới nhất (Releases)](https://github.com/doubleD1302/CZN-VH/releases/latest)
 
-## [⬇ Tải APK mới nhất](https://github.com/doubleD1302/CZN-VH/releases/latest)
+---
 
-Bản **1.6.12** có nền toàn màn hình, logo game kèm cờ Việt Nam và chữ **VI**, nút/icon riêng và màn hình công cụ làm mờ nền. Gói bản dịch đi kèm là **1.6.11**. Chibi GIF v2 có chuyển động và hiệu ứng trái tim mới; chế độ giảm chuyển động dùng ảnh tĩnh v2.
+## 🚀 Tính năng nổi bật
 
-Source trên nhánh `main` đã triển khai bốn trang **Thiết lập · Cập nhật · Thông báo · Cài đặt** theo bản thảo được duyệt, dùng ảnh chữ/icon/nút riêng, font thống nhất và các line/viền vàng. Xem [thiết kế và trạng thái bàn giao](docs/ui-four-pages.md). Thay đổi này chưa có trong APK 1.6.12 đang phát hành.
+- **Việt hóa trực tiếp:** Thay thế slot tiếng Nhật (`日本語`) trong game, giữ nguyên âm thanh lồng tiếng gốc.
+- **Cập nhật tự động (OTA):** Tự động kiểm tra và tải bản dịch mới hoặc cập nhật app trực tiếp mà không cần cài lại thủ công.
+- **Nhân vật đồng hành & Lớp phủ (Overlay):** Chibi đồng hành hỗ trợ Thuyền Trưởng, hỗ trợ chế độ lớp phủ nổi trên màn hình game.
+- **Báo lỗi bằng hình ảnh & Bảng Vinh Danh:** Chụp màn hình lỗi gửi trực tiếp cho Dev; ghi nhận đóng góp cộng đồng với huy hiệu 🥇, 🥈, 🥉.
+- **An toàn & Phục hồi:** Cơ chế sao lưu thông minh, hỗ trợ khôi phục dữ liệu gốc chỉ với 1 chạm.
 
-## Cài tiếng Việt trong 3 bước
+---
 
-1. [Cài và khởi động Shizuku](https://shizuku.rikka.app/guide/setup/), rồi cấp quyền cho app. Android 11 trở lên dùng gỡ lỗi không dây; Android 8–10 cần máy tính. Khởi động lại Shizuku sau khi khởi động lại điện thoại.
-2. Mở CZN, chọn ngôn ngữ văn bản **日本語 (tiếng Nhật)** và chờ tải đủ dữ liệu. Trong **Thiết lập**, bấm **Kiểm tra lại dữ liệu game** đến khi dữ liệu sẵn sàng.
-3. Bấm **Cài tiếng Việt** và chờ kết quả. App đóng game trước khi cài. Khi báo thành công, mở game và giữ ngôn ngữ văn bản **日本語**.
+## 📱 Hướng dẫn cài đặt nhanh
 
-## Cập nhật và trợ giúp
+### Dành cho Android:
+1. Cài đặt và khởi chạy **[Shizuku](https://shizuku.rikka.app/)**, sau đó cấp quyền cho ứng dụng **CZN Việt Hóa**.
+2. Mở game CZN, tải đầy đủ dữ liệu và đặt ngôn ngữ văn bản là **日本語**.
+3. Mở app **CZN Việt Hóa**, bấm **Cài tiếng Việt** (hoặc **Cập nhật bản dịch**).
+4. Vào game và trải nghiệm tiếng Việt!
 
-Bấm **Cập nhật** trên màn hình chính để mở tab riêng. Khi có APK mới, tải và xác nhận cài trên màn hình Android. Nếu được yêu cầu, bật **Cho phép từ nguồn này** và quay lại app. Cập nhật APK không cần Shizuku.
+### Dành cho Windows (PC):
+1. Chạy công cụ cài đặt trên máy tính.
+2. Chọn đường dẫn thư mục cài đặt game CZN.
+3. Bấm **Cài tiếng Việt** và vào game.
 
-Bật cập nhật nền trong cài đặt để app kiểm tra và tải APK cùng bản dịch qua Wi-Fi. Các đợt sau đi kèm APK mới để cập nhật giao diện, icon, tài nguyên và chức năng. Android vẫn yêu cầu xác nhận cài APK; bản dịch đã tải cần bấm cài tiếng Việt.
+---
 
-Các trang công cụ nằm trên nền làm mờ. Bấm nhân vật động hoặc **Trợ giúp** để mở hộp thoại: chạm **copy mã lỗi** để sao chép báo cáo; chạm **gửi cho Dev** để mở [Facebook nhà phát triển](https://www.facebook.com/datnguyen.kei/).
+## 🛠 Báo lỗi & Hỗ trợ
 
-Trong **Thiết lập**, chọn **Khôi phục gốc** để bỏ bản dịch. Nếu app yêu cầu **Phục hồi giao dịch**, hoàn tất trước khi mở game. Game và app cần nằm cùng hồ sơ Android chính.
+Khi gặp lỗi dịch thuật, lỗi hiển thị hoặc sự cố phát sinh:
+- Chạm vào **Nhân vật đồng hành** trong app -> Chọn **Báo Lỗi Bằng Hình Ảnh** để gửi ảnh chụp màn hình kèm mô tả.
+- Xem danh sách người đóng góp tại mục **Bảng Vinh Danh**.
 
-Giao diện trước đợt chibi v2 đã có analyzer sạch, 33 kiểm thử Flutter và ảnh chạy trên giả lập. Đợt 1.6.12 được đối chiếu tài nguyên, build, chữ ký/hash và QA độc lập; không chạy lại test, analyzer hoặc runtime. Điện thoại thật và gameplay vẫn chờ người chơi kiểm chứng. Lần push này bỏ qua CI theo yêu cầu dừng test.
+---
 
-<details>
-<summary>Dành cho người phát hành từ PC</summary>
-
-Chọn **Đồng bộ Android / GitHub** trong bộ cài PC để dựng và phát hành. Công cụ dựng APK mới cùng phiên bản với bản dịch, lưu snapshot nguồn và đối chiếu chữ ký/hash trước phát hành. Khóa ký chỉ giữ trên máy phát hành.
-
-Thông báo nêu nội dung theo bản đồ, chế độ, nhân vật, thẻ/kỹ năng khi có liên kết nguồn xác định. **Xem chi tiết / tìm nội dung** cho phép lọc và xem trước/sau với gói thực tế. Xem [lưu dấu vết](docs/translation-history.md) và [cập nhật toàn bộ APK](docs/full-app-updates.md).
-
-Đợt chỉ đổi ứng dụng dùng `tools/publish_android_release.py --app-only`: giữ nguyên metadata bản dịch đã ký, yêu cầu APK mới và bằng chứng đúng hash. `--prepare-only` chỉ chuẩn bị cục bộ.
-
-</details>
-
-Giấy phép thư viện/font được giữ trong `assets/THIRD_PARTY_LICENSES.txt`, `assets/fonts/*_OFL.txt` và `assets/fonts/*_LICENSE.txt`. Tài nguyên và logo game không được mặc nhiên cấp lại giấy phép của mã ứng dụng.
+## 📄 Bản quyền
+Dự án được thực hiện phi thương mại nhằm phục vụ cộng đồng người chơi CZN tại Việt Nam. Toàn bộ hình ảnh, tài nguyên và logo game thuộc bản quyền của Smilegate Megaport / Super Creative.

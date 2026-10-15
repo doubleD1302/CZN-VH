@@ -1125,6 +1125,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         appVersion: appVersion,
         patchVersion: patchVersion,
         busy: _busy,
+        overlayActive: _status['overlayRunning'] == true,
         onSave: _saveSettings,
         onCancel: _cancelSettings,
       ),

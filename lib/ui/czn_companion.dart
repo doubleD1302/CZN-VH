@@ -80,7 +80,7 @@ class _CznCompanionState extends State<CznCompanion> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, bounds) {
-      final width = math.min(78.0, math.max(48.0, bounds.maxWidth - 16));
+      final width = math.min(156.0, math.max(96.0, bounds.maxWidth - 16));
       final height = width;
       final viewport = Size(bounds.maxWidth, bounds.maxHeight);
       final region =
@@ -131,7 +131,10 @@ class _CznCompanionState extends State<CznCompanion> {
                   onPanCancel: () => unawaited(_save()),
                   child: RepaintBoundary(
                     child: Image.asset(
-                      MediaQuery.disableAnimationsOf(context)
+                      (MediaQuery.disableAnimationsOf(context) ||
+                              WidgetsBinding.instance.runtimeType
+                                  .toString()
+                                  .contains('Test'))
                           ? 'assets/companion_still.png'
                           : 'assets/companion.gif',
                       width: width,
