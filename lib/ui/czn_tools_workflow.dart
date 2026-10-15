@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../services/native_bridge.dart';
 import '../services/patch_service.dart';
 import 'czn_tools_design.dart';
 
@@ -64,6 +65,7 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
   bool get _locked => widget.busy || widget.checking;
   bool get _access => widget.status['accessGranted'] == true;
   bool get _ready => widget.game['success'] == true;
+  bool get _isPc => widget.status['package'] == 'smilegate.czn.pc';
 
   VoidCallback? _guard(VoidCallback? callback) => _locked ? null : callback;
 
@@ -79,6 +81,7 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
         ? (newerPatch ? 'Cập nhật bản dịch' : 'Cài lại bản dịch')
         : 'CÀI TIẾNG VIỆT';
     final operation = widget.lastOperation;
+    final isPc = widget.status['package'] == 'smilegate.czn.pc';
     return _WorkflowScroll(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -88,6 +91,7 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
             access: _access,
             ready: _ready,
             installed: widget.installed,
+            isPc: isPc,
           ),
           const SizedBox(height: 12),
           if (widget.recovery) ...[
@@ -122,27 +126,36 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
           ],
           _SetupStep(
             number: '01',
-            title: 'Kết nối Shizuku',
-            glyph: CznToolsGlyph16.key,
-            helper: _access
-                ? 'Đã kết nối'
-                : widget.status['shizukuRunning'] == true
-                ? 'Chưa cấp quyền'
-                : 'Chưa kết nối',
-            done: _access,
-            actionLabel: _access
+            title: isPc ? 'Thư mục game' : 'Kết nối Shizuku',
+            glyph: isPc ? CznToolsGlyph16.folder : CznToolsGlyph16.key,
+            helper: isPc
+                ? (_ready ? 'Đã nhận diện thư mục game' : 'Chưa tìm thấy game')
+                : (_access
+                    ? 'Đã kết nối'
+                    : widget.status['shizukuRunning'] == true
+                    ? 'Chưa cấp quyền'
+                    : 'Chưa kết nối'),
+            done: isPc ? _ready : _access,
+            actionLabel: isPc ? 'Chọn thư mục' : (_access
                 ? 'Mở Shizuku'
                 : widget.status['shizukuRunning'] == true
                 ? 'Cấp quyền'
-                : 'Mở Shizuku',
-            onPressed: _guard(widget.onAccess),
+                : 'Mở Shizuku'),
+            onPressed: isPc
+                ? () async {
+                    await NativeBridge.action('chooseGameDir');
+                    widget.onCheckGame?.call();
+                  }
+                : _guard(widget.onAccess),
           ),
           const SizedBox(height: 10),
           _SetupStep(
             number: '02',
-            title: 'Dữ liệu game',
+            title: isPc ? 'Dữ liệu CZN' : 'Dữ liệu game',
             glyph: CznToolsGlyph16.folder,
-            helper: 'Chọn 日本語 trong game.',
+            helper: isPc
+                ? (_ready ? 'Sẵn sàng cài đặt' : 'Cần tải đủ dữ liệu game qua STOVE.')
+                : 'Chọn 日本語 trong game.',
             done: _ready,
             actionLabel: 'Kiểm tra lại dữ liệu',
             onPressed: _guard(widget.onCheckGame),
@@ -326,8 +339,10 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
           ),
           const SizedBox(height: 10),
         ],
-        const Text(
-          'Khởi động Shizuku bằng gỡ lỗi không dây, rồi cấp quyền cho app. Android 8–10 cần máy tính để khởi động Shizuku.',
+        Text(
+          _isPc
+              ? 'Hãy đảm bảo bạn đã đóng game CZN trước khi cài đặt hoặc khôi phục bản dịch. Bộ cài sẽ tự động sao lưu file gốc an toàn.'
+              : 'Khởi động Shizuku bằng gỡ lỗi không dây, rồi cấp quyền cho app. Android 8–10 cần máy tính để khởi động Shizuku.',
           style: _body,
         ),
         const SizedBox(height: 10),
@@ -344,8 +359,10 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
           onPressed: _guard(widget.onLocal),
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Sau khi cài, đặt ngôn ngữ văn bản trong game là 日本語. Bản dịch dùng slot tiếng Nhật; giọng lồng tiếng tùy bạn chọn. Shizuku cần được khởi động lại sau khi điện thoại khởi động.',
+        Text(
+          _isPc
+              ? 'Sau khi cài xong, mở game và chọn ngôn ngữ văn bản trong Cài đặt là 日本語 (Tiếng Nhật) để hiển thị toàn bộ Tiếng Việt. Giọng lồng tiếng tùy bạn chọn.'
+              : 'Sau khi cài, đặt ngôn ngữ văn bản trong game là 日本語. Bản dịch dùng slot tiếng Nhật; giọng lồng tiếng tùy bạn chọn. Shizuku cần được khởi động lại sau khi điện thoại khởi động.',
           style: _body,
         ),
         const SizedBox(height: 10),
@@ -447,22 +464,30 @@ class _SetupProgress extends StatelessWidget {
     required this.access,
     required this.ready,
     required this.installed,
+    this.isPc = false,
   });
-  final bool access, ready, installed;
+  final bool access, ready, installed, isPc;
 
   @override
   Widget build(BuildContext context) {
     final active = !access ? 0 : (!ready ? 1 : 2);
     final completed = [access, ready, installed];
-    const labels = ['Shizuku', 'Dữ liệu game', 'Bản dịch'];
+    final labels = isPc
+        ? const ['Thư mục game', 'Dữ liệu CZN', 'Tiếng Việt']
+        : const ['Shizuku', 'Dữ liệu game', 'Bản dịch'];
     return Column(
       children: [
         Row(
           children: [
             const Expanded(child: CznToolsSideLine(height: 12)),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
-              child: Text('Trạng thái thiết lập', style: _body),
+            const Flexible(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Trạng thái thiết lập', style: _body),
+                ),
+              ),
             ),
             const Expanded(
               child: CznToolsSideLine(height: 12, pointingRight: false),
@@ -517,11 +542,12 @@ class CznToolsUpdatePage extends StatelessWidget {
     this.onCheck,
     this.onUpdate,
     this.onCancel,
+    this.isPc = false,
   });
 
   final String appVersion, patchVersion, message, onlineMessage;
   final AppUpdateInfo? update;
-  final bool pending, checking, updating;
+  final bool pending, checking, updating, isPc;
   final double progress;
   final VoidCallback? onCheck, onUpdate, onCancel;
 
@@ -615,8 +641,10 @@ class CznToolsUpdatePage extends StatelessWidget {
           onPressed: checking || updating ? null : onCheck,
         ),
         const SizedBox(height: 10),
-        const Text(
-          'Android sẽ hỏi xác nhận khi cài APK.',
+        Text(
+          isPc
+              ? 'Bản cập nhật PC sẽ tự động tải và áp dụng trực tiếp vào game.'
+              : 'Android sẽ hỏi xác nhận khi cài APK.',
           textAlign: TextAlign.center,
           style: _body,
         ),

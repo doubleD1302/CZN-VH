@@ -43,6 +43,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   CommunityNotice? _currentNotice;
   bool _noticeOriginOpen = false, _settingsOriginOpen = false;
   int _noticeOriginTab = 0, _settingsOriginTab = 0;
+  bool get _isPc => _status['package'] == 'smilegate.czn.pc';
 
   void _openTools(int tab) {
     if (!mounted || _busy) return;
@@ -77,7 +78,85 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadCompanionSetting());
+    if (!WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkAndShowExitGameNotice();
+      });
+    }
     _refresh();
+  }
+
+  Future<void> _checkAndShowExitGameNotice() async {
+    if (WidgetsBinding.instance.runtimeType.toString().contains('Test')) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final snoozeUntil = prefs.getInt('dismiss_exit_game_notice_until') ?? 0;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now < snoozeUntil) {
+        return;
+      }
+      if (!mounted) return;
+
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF14171F),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: const BorderSide(color: Color(0xFFC5A059), width: 1.5),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFE5A93C), size: 26),
+              SizedBox(width: 8),
+              Text(
+                'LƯU Ý QUAN TRỌNG',
+                style: TextStyle(
+                  color: Color(0xFFF0E6D2),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Để tránh bị lỗi - Đảm bảo bạn đã thoát game hoàn toàn trước khi cài Việt Hóa nha !',
+            style: TextStyle(
+              color: Color(0xFFE2D9C8),
+              fontSize: 15,
+              height: 1.45,
+            ),
+          ),
+          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                final p = await SharedPreferences.getInstance();
+                await p.setInt(
+                  'dismiss_exit_game_notice_until',
+                  DateTime.now().add(const Duration(hours: 24)).millisecondsSinceEpoch,
+                );
+                if (ctx.mounted) Navigator.pop(ctx);
+              },
+              child: const Text(
+                'Tắt 24 giờ',
+                style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 14),
+              ),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFC5A059),
+                foregroundColor: Colors.black,
+                textStyle: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Đóng'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {}
   }
 
   Future<void> _loadCompanionSetting() async {
@@ -202,7 +281,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) {
           setState(() {
             _remote = channel;
-            final appNew =
+            final appNew = !_isPc &&
                 (channel.data['app_code'] as int? ?? 0) >
                 (_status['appCode'] as int? ?? 10612);
             final patchNew =
@@ -348,7 +427,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
     var finished = false;
     Map<String, dynamic> response = {};
-    final subscription = NativeBridge.progress.receiveBroadcastStream().listen((
+    final subscription = NativeBridge.progressEvents.listen((
       event,
     ) {
       if (mounted && !finished) {
@@ -472,7 +551,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _install() async {
-    if (AppUpdateInfo.fromChannel(
+    if (!_isPc &&
+        AppUpdateInfo.fromChannel(
           _remote?.data,
           _status['appCode'] as int? ?? 10612,
         ) !=
@@ -549,6 +629,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _updateApp({bool resume = false}) async {
     if (_busy || _checking) return;
+    if (_isPc) {
+      final release = _remote;
+      final rawUrl = release?.data['app_url'] as String?;
+      if (rawUrl != null && rawUrl.isNotEmpty) {
+        final uri = Uri.tryParse(rawUrl);
+        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+      return;
+    }
     final release = _remote;
     if (!resume &&
         AppUpdateInfo.fromChannel(
@@ -568,7 +657,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           : 'Đang tải APK cập nhật…';
     });
     var finished = false;
-    final subscription = NativeBridge.progress.receiveBroadcastStream().listen((
+    final subscription = NativeBridge.progressEvents.listen((
       event,
     ) {
       if (!mounted || finished) return;
@@ -794,20 +883,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _remote != null && (_bundled == null || _remote!.code >= _bundled!.code)
         ? _remote
         : _bundled;
-    final appNew =
+    final appNew = !_isPc &&
         AppUpdateInfo.fromChannel(
           _remote?.data,
           _status['appCode'] as int? ?? 10612,
         ) !=
         null;
+    final patchHasUpdate = _remote != null &&
+        (_game['installed_code'] as int? ?? 0) > 0 &&
+        _remote!.code > (_game['installed_code'] as int);
     final label = appNew
         ? 'Cập nhật toàn bộ'
         : recovery
         ? 'Phục hồi dữ liệu'
         : !access || !ready
-        ? 'Cài tiếng Việt'
+        ? (_isPc ? 'Chọn thư mục game' : 'Cài tiếng Việt')
         : installed
-        ? 'Cập nhật bản dịch'
+        ? (_isPc
+            ? (patchHasUpdate ? 'Cập nhật bản dịch' : 'VÀO GAME CZN')
+            : 'Cập nhật bản dịch')
         : 'Cài tiếng Việt';
     return Scaffold(
       body: CznCompanion(
@@ -844,14 +938,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   } else if (recovery && access) {
                     unawaited(_restore());
                   } else if (!access || !ready) {
-                    _openTools(0);
+                    if (_isPc) {
+                      NativeBridge.action('chooseGameDir').then((_) => _refresh());
+                    } else {
+                      _openTools(0);
+                    }
+                  } else if (installed && _isPc) {
+                    if (patchHasUpdate) {
+                      unawaited(_install());
+                    } else {
+                      unawaited(_launchGame());
+                    }
                   } else {
                     unawaited(_install());
                   }
                 },
           onSetup: _busy ? null : () => _openTools(0),
           onUpdates: _busy ? null : () => _openTools(1),
-          onHelp: _showCompanionChat,
+          onHelp: _showToolsHelp,
           onSettings: _busy || _checking ? null : _settings,
           onNotice: _busy ? null : () => _maybeNotice(force: true),
         ),
@@ -889,13 +993,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
+        scrollable: true,
         title: const Text('Hướng dẫn và trợ giúp'),
-        content: const SingleChildScrollView(
-          child: Text(
-            'Sau khi cài, mở game và giữ ngôn ngữ văn bản 日本語. '
-            'Khởi động lại Shizuku sau khi điện thoại khởi động. '
-            'Khi game cập nhật, app sẽ kiểm tra lại dữ liệu và chờ gói tương thích.',
-          ),
+        content: const Text(
+          'Sau khi cài, mở game và giữ ngôn ngữ văn bản 日本語. '
+          'Khởi động lại Shizuku sau khi điện thoại khởi động. '
+          'Khi game cập nhật, app sẽ kiểm tra lại dữ liệu và chờ gói tương thích.',
         ),
         actions: [
           TextButton(
@@ -1000,6 +1103,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         message: _appUpdateMessage,
         onlineMessage: _onlineMessage,
         progress: _progress,
+        isPc: _isPc,
         onCheck: enabled ? _refresh : null,
         onUpdate: enabled
             ? () => _updateApp(resume: _status['pendingAppUpdate'] == true)

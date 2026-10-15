@@ -63,8 +63,8 @@ void main() {
       tester.getRect(find.byKey(const Key('anniversary-background'))).size,
       tester.view.physicalSize / tester.view.devicePixelRatio,
     );
-    await tester.scrollUntilVisible(find.text('1. Kết nối Shizuku'), 150);
-    expect(find.text('1. Kết nối Shizuku'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Kết nối Shizuku'), 150);
+    expect(find.text('Kết nối Shizuku'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.textContaining('Bản đi kèm vẫn có thể cài.'),
       250,
@@ -81,18 +81,18 @@ void main() {
     await tester.tap(find.byKey(const Key('open-setup')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tools-blurred-background')), findsOneWidget);
-    expect(find.text('Kiểm tra cập nhật'), findsNothing);
-    expect(find.text('1. Kết nối Shizuku'), findsOneWidget);
+    expect(find.text('KIỂM TRA CẬP NHẬT'), findsNothing);
+    expect(find.text('Kết nối Shizuku'), findsOneWidget);
     await tester.tap(find.byKey(const Key('tools-update-tab')));
     await tester.pumpAndSettle();
-    expect(find.text('Kiểm tra cập nhật'), findsOneWidget);
-    expect(find.text('1. Kết nối Shizuku'), findsNothing);
-    await tester.tap(find.byTooltip('Về hình nền'));
+    expect(find.text('KIỂM TRA CẬP NHẬT'), findsOneWidget);
+    expect(find.text('Kết nối Shizuku'), findsNothing);
+    await tester.tap(find.byTooltip('Về trang chính'));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('tools-blurred-background')), findsNothing);
     await tester.tap(find.byKey(const Key('open-updates')));
     await tester.pumpAndSettle();
-    expect(find.text('Kiểm tra cập nhật'), findsOneWidget);
+    expect(find.text('KIỂM TRA CẬP NHẬT'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -110,6 +110,9 @@ void main() {
     await tester.tap(find.byKey(const Key('open-setup')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.text('Thao tác và trợ giúp'), 240);
+    await tester.tap(find.text('Thao tác và trợ giúp'));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Cài từ gói tải sẵn'), 240);
     await tester.ensureVisible(find.text('Cài từ gói tải sẵn'));
     await tester.pumpAndSettle();
@@ -117,7 +120,14 @@ void main() {
     await tester.scrollUntilVisible(find.text('Hướng dẫn và trợ giúp'), 240);
     await tester.tap(find.text('Hướng dẫn và trợ giúp'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Sao chép báo cáo'), 240);
+    await tester.scrollUntilVisible(
+      find.text('Sao chép báo cáo'),
+      240,
+      scrollable: find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(Scrollable),
+      ),
+    );
     expect(tester.takeException(), isNull);
   });
 }

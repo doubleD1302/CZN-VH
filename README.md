@@ -1,6 +1,8 @@
-# CZN Việt Hóa — Android
+# CZN Việt Hóa — Android & Windows Launcher
 
-Cài bản dịch tiếng Việt cho **Chaos Zero Nightmare** bằng Shizuku.
+🔗 **GitHub Repository:** [https://github.com/doubleD1302/CZN-VH](https://github.com/doubleD1302/CZN-VH)
+
+Cài bản dịch tiếng Việt cho **Chaos Zero Nightmare** (Hỗ trợ cả Android và Windows PC).
 
 ## [⬇ Tải APK mới nhất](https://github.com/doubleD1302/CZN-VH/releases/latest)
 

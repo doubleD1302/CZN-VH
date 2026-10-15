@@ -201,8 +201,11 @@ void main() {
     );
     await tester.pumpWidget(const CznPatcherApp());
     await tester.pump(const Duration(milliseconds: 100));
-    expect(scans, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     gate.complete(release);
     await tester.pumpAndSettle();

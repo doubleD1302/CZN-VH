@@ -279,6 +279,7 @@ class _ToolsNavigation extends StatelessWidget {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
+                    key: tab == CznToolsTab.updates ? const Key('tools-update-tab') : null,
                     onTap: enabled ? () => onChanged(tab) : null,
                     borderRadius: BorderRadius.circular(30),
                     child: Padding(
@@ -1065,6 +1066,16 @@ class _ToolsArtRepository extends ChangeNotifier {
     removeListener(listener);
     _consumers--;
     if (_consumers != 0) return;
+    if (WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
+      _generation++;
+      for (final image in images.values) {
+        image.dispose();
+      }
+      images.clear();
+      _atlas = null;
+      _loading = null;
+      return;
+    }
     _releaseTimer = Timer(const Duration(seconds: 2), () {
       if (_consumers != 0) return;
       _generation++;

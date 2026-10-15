@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 class NativeBridge {
   static const channel = MethodChannel('vn.czn.viethoa/patcher');
   static const progress = EventChannel('vn.czn.viethoa/progress');
+  static Stream<dynamic> get progressEvents => progress.receiveBroadcastStream();
   static Future<Map<String, dynamic>> map(
     String method, [
     Map<String, dynamic>? args,
