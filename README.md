@@ -25,7 +25,7 @@ This project is **100% free and non-commercial**, developed by fans for fans. We
 All intellectual property rights, trademarks, game assets, character names, and original texts of *Chaos Zero Nightmare* belong exclusively to **Super Creative** and **Smilegate** (Smilegate Megaport). 
 
 We have proactively reached out to Smilegate Support regarding this community project. If Smilegate or Super Creative requests any modifications or the removal of this repository, we will comply **immediately and unconditionally**. 
-* **Contact for Official Inquiries / Takedown:** [Điền Email của bạn vào đây] or via GitHub Issues.
+* **Contact for Official Inquiries / Takedown:** Via GitHub Issues or project maintainers.
 
 ---
 
@@ -40,13 +40,19 @@ We have proactively reached out to Smilegate Support regarding this community pr
 * **Lưu ý an toàn tài khoản:** Dù bản vá chỉ thay đổi ngôn ngữ hiển thị và không can thiệp vào dữ liệu trận đấu, mọi hành vi can thiệp vào tệp tin phía máy khách (client) khi chưa có sự tích hợp chính thức từ Nhà phát hành đều tiềm ẩn rủi ro từ hệ thống bảo mật tự động. Người dùng vui lòng cân nhắc và tự chịu trách nhiệm khi sử dụng.
 
 ### 3. Hướng dẫn cài đặt
-1. Tải bản phát hành mới nhất tại mục [Releases](https://github.com/doubleD1302/CZN-VH/releases).
-2. Giải nén tệp tin vừa tải về.
-3. Sao chép các tệp Việt hóa vào thư mục cài đặt game theo đường dẫn:
-   `[Điền đường dẫn thư mục chứa file ngôn ngữ của game tại đây]`
-4. Khởi động game và trải nghiệm.
+Dự án cung cấp công cụ tự động cài đặt (không cần chép tệp thủ công):
 
-*(Để gỡ bản Việt hóa: Sử dụng tính năng "Verify Integrity / Repair Game Files" trên STOVE Client để khôi phục tệp gốc).*
+* **Dành cho Windows (PC):**
+  1. Tải công cụ cài đặt `CZN_VietHoa_Windows_launcher.exe` tại mục [Releases](https://github.com/doubleD1302/CZN-VH/releases).
+  2. Khởi chạy công cụ và chọn thư mục cài game *(Mặc định: `C:\ProgramData\Smilegate\Games\ChaosZeroNightmare`)*.
+  3. Bấm **Cài tiếng Việt** và khởi động game.
+
+* **Dành cho Android:**
+  1. Tải tệp `CNZ_VietHoa_Fanmade.apk` tại mục [Releases](https://github.com/doubleD1302/CZN-VH/releases).
+  2. Cấp quyền qua **[Shizuku](https://shizuku.rikka.app/)**, mở ứng dụng và bấm **Cài tiếng Việt**.
+  3. Khởi động game và trải nghiệm.
+
+*(Để gỡ bản Việt hóa: Bấm "Khôi phục gốc" trong công cụ cài đặt hoặc sử dụng tính năng "Verify Integrity / Repair Game Files" trên STOVE Client).*
 
 ### 4. Đóng góp & Báo lỗi dịch thuật
 Do khối lượng văn bản trong game rất lớn, bản dịch không tránh khỏi những thiếu sót. Nếu bạn phát hiện lỗi dịch thuật, lỗi hiển thị phông chữ (font) hoặc muốn đóng góp cải thiện bản dịch:
