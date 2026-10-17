@@ -12,7 +12,8 @@ import net.jpountz.xxhash.*;
 /** SSRA v4 parser: never changes engine code or fields outside approved JP slots. */
 public final class PatchFormat {
     public static final String STORY = "db/story_main_part1new_260729@story.db";
-    public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList("manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev", "chunks/lang_ja_b01_0.ssrc", "chunks/base_b21_0.ssrc"));
+    public static final String SUB_STORY = "db/story_sub_part1new_260729@story.db";
+    public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList("manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev", "chunks/lang_ja_b01_0.ssrc", "chunks/base_b21_0.ssrc", "chunks/base_b17_0.ssrc"));
     public static String sha(File f) throws Exception { try(InputStream in = new FileInputStream(f)){return sha(in);} }
     public static String sha(InputStream in) throws Exception { MessageDigest d=MessageDigest.getInstance("SHA-256"); byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) d.update(b,0,n); return hex(d.digest()); }
     public static String hex(byte[] b){StringBuilder s=new StringBuilder();for(byte v:b)s.append(String.format(Locale.ROOT,"%02x",v&255));return s.toString();}

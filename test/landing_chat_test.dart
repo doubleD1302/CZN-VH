@@ -340,13 +340,13 @@ void main() {
       );
       expect(
         rich.text.toPlainText(includePlaceholders: false),
-        contains('Thuyền trưởng lại gặp lỗi rồi ư?'),
+        contains('Chào Thuyền trưởng! Nếu gặp lỗi'),
       );
-      expect(companionMessage, endsWith('chăm sóc thôi~♥'));
+      expect(companionMessage, endsWith('để gửi phản hồi nhé!'));
       await tester.tap(find.byKey(const Key('copy-error-link')));
       await tester.pump();
       expect(jsonDecode(copied!)['error_code'], 'TEST_STORAGE');
-      expect(find.text('Đã copy mã lỗi ♥'), findsOneWidget);
+      expect(find.text('Đã copy mã lỗi vào bộ nhớ tạm.'), findsOneWidget);
       await tester.tap(find.byKey(const Key('dev-profile-link')));
       await tester.pump();
       expect(launcher.opened, 'https://www.facebook.com/datnguyen.kei/');
