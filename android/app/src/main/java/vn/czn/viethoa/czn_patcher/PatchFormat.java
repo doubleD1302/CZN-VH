@@ -12,7 +12,8 @@ import net.jpountz.xxhash.*;
 /** SSRA v4 parser: never changes engine code or fields outside approved JP slots. */
 public final class PatchFormat {
     public static final String STORY = "db/story_main_part1new_260729@story.db";
-    public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList("manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev", "chunks/lang_ja_b01_0.ssrc", "chunks/base_b21_0.ssrc"));
+    public static final String SUB_STORY = "db/story_sub_part1new_260729@story.db";
+    public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList("manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev", "chunks/lang_ja_b01_0.ssrc", "chunks/base_b21_0.ssrc", "chunks/base_b17_0.ssrc"));
     public static String sha(File f) throws Exception { try(InputStream in = new FileInputStream(f)){return sha(in);} }
     public static String sha(InputStream in) throws Exception { MessageDigest d=MessageDigest.getInstance("SHA-256"); byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) d.update(b,0,n); return hex(d.digest()); }
     public static String hex(byte[] b){StringBuilder s=new StringBuilder();for(byte v:b)s.append(String.format(Locale.ROOT,"%02x",v&255));return s.toString();}
@@ -54,7 +55,7 @@ public final class PatchFormat {
         if(!files.containsKey("text/ja/text.db"))throw new IOException("Hãy tải ngôn ngữ Nhật trong game trước.");
     }
     public Chunk chunk(Entry f)throws Exception{for(Chunk c:chunks)if(c.gid==f.gid&&f.offset>=c.start&&f.offset+f.cs<=c.start+c.size)return c;throw new IOException("Slot JP trải nhiều chunk; cần gói tương thích mới.");}
-    public void verifyChunk(File root,Chunk c)throws Exception{File f=safe(root,"chunks/"+c.name);if(f.length()!=c.total)throw new IOException("Game chưa tải đủ: "+c.name);byte[] tail=new byte[16];try(RandomAccessFile r=new RandomAccessFile(f,"r")){r.seek(f.length()-16);r.readFully(tail);}ByteBuffer t=ByteBuffer.wrap(tail).order(ByteOrder.LITTLE_ENDIAN);if(!new String(tail,0,4,StandardCharsets.US_ASCII).equals("SSRC")||t.getInt(4)!=c.id||t.getLong(8)!=c.checksum||xxFile(f,c.size)!=c.checksum)throw new IOException("Checksum game không khớp; hãy hoàn tất cập nhật game.");}
+    public void verifyChunk(File root,Chunk c)throws Exception{File f=safe(root,"chunks/"+c.name);if(f.length()!=c.total){if(c.name.startsWith("lang_ja_")){throw new IOException("Chưa tải gói Tiếng Nhật trong game ("+c.name+"). Hãy mở CZN, vào Cài đặt chọn 日本語 để tải dữ liệu trước.");}throw new IOException("Game chưa tải đủ tệp tài nguyên: "+c.name+". Hãy mở game để tải đủ dữ liệu.");}byte[] tail=new byte[16];try(RandomAccessFile r=new RandomAccessFile(f,"r")){r.seek(f.length()-16);r.readFully(tail);}ByteBuffer t=ByteBuffer.wrap(tail).order(ByteOrder.LITTLE_ENDIAN);if(!new String(tail,0,4,StandardCharsets.US_ASCII).equals("SSRC")||t.getInt(4)!=c.id||t.getLong(8)!=c.checksum||xxFile(f,c.size)!=c.checksum)throw new IOException("Checksum game không khớp; hãy hoàn tất cập nhật game.");}
     public void set(Entry f,Chunk c,int cs,int us,long fileHash,long chunkHash){b.putInt(f.pos+16,cs);b.putInt(f.pos+20,us);data[f.pos+32]=1;b.putLong(fh+f.index*8,fileHash);b.putLong(co+c.index*32+24,chunkHash);}
     public static byte[] identity(byte[] existing,byte[] manifest)throws Exception{return CacheIdentity.update(existing,manifest);}
 }

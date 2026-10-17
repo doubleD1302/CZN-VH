@@ -49,18 +49,15 @@ class _BugReportDialogState extends State<BugReportDialog> {
     try {
       // Quyền truy cập ảnh tối ưu nhất: Photo Picker hệ thống
       // Chỉ ảnh nào được chọn thì ứng dụng mới có quyền đọc tệp đó
-      final file = await FilePicker.pickFile(
-        type: FileType.image,
-      );
+      final file = await FilePicker.pickFile(type: FileType.image);
 
       if (file != null && file.path != null && mounted) {
         setState(() => _imageFile = File(file.path!));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không thể chọn ảnh: $e')),
-        );
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Không thể chọn ảnh: $e')));
       }
     }
   }
@@ -68,7 +65,9 @@ class _BugReportDialogState extends State<BugReportDialog> {
   Future<void> _submit() async {
     if (_imageFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng chọn ảnh chụp màn hình bị lỗi.')),
+        const SnackBar(
+          content: Text('Vui lòng chọn ảnh chụp màn hình bị lỗi.'),
+        ),
       );
       return;
     }
@@ -203,7 +202,11 @@ class _BugReportDialogState extends State<BugReportDialog> {
             const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.favorite_rounded, color: Color(0xFFB03B50), size: 20),
+                Icon(
+                  Icons.favorite_rounded,
+                  color: Color(0xFFB03B50),
+                  size: 20,
+                ),
                 SizedBox(width: 8),
                 Text(
                   'CẢM ƠN THUYỀN TRƯỞNG',
@@ -238,10 +241,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
           icon: const Icon(Icons.check_rounded, size: 20),
           label: const Text(
             'Đã Hiểu & Đóng',
-            style: TextStyle(
-              fontSize: 14.5,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
           ),
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFF2E7D32),
@@ -309,10 +309,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(11),
-                      child: Image.file(
-                        _imageFile!,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.file(_imageFile!, fit: BoxFit.cover),
                     ),
                     Positioned(
                       top: 6,
@@ -352,10 +349,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
                     SizedBox(height: 4),
                     Text(
                       '(Chỉ cấp quyền đọc cho ảnh được chọn)',
-                      style: TextStyle(
-                        color: Color(0xFF6B6275),
-                        fontSize: 11,
-                      ),
+                      style: TextStyle(color: Color(0xFF6B6275), fontSize: 11),
                     ),
                   ],
                 ),
@@ -380,9 +374,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
             fontWeight: FontWeight.w600,
           ),
           hintText: 'Nhập tên hoặc biệt danh...',
-          hintStyle: const TextStyle(
-            color: Color(0xFF8A7F92),
-          ),
+          hintStyle: const TextStyle(color: Color(0xFF8A7F92)),
           prefixIcon: const Icon(
             Icons.person_outline,
             color: Color(0xFF9E233A),
@@ -399,10 +391,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: Color(0xFFB03B50),
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: Color(0xFFB03B50), width: 2),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
@@ -430,9 +419,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
             fontWeight: FontWeight.w600,
           ),
           hintText: 'Vị trí lỗi, câu thoại, thẻ bài hoặc tình huống...',
-          hintStyle: const TextStyle(
-            color: Color(0xFF8A7F92),
-          ),
+          hintStyle: const TextStyle(color: Color(0xFF8A7F92)),
           prefixIcon: const Padding(
             padding: EdgeInsets.only(bottom: 40),
             child: Icon(Icons.description_outlined, color: Color(0xFF9E233A)),
@@ -449,10 +436,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: Color(0xFFB03B50),
-              width: 2,
-            ),
+            borderSide: const BorderSide(color: Color(0xFFB03B50), width: 2),
           ),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: 12,
@@ -482,10 +466,7 @@ class _BugReportDialogState extends State<BugReportDialog> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFB03B50),
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 12,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

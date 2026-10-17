@@ -4,16 +4,20 @@ import 'bug_report_dialog.dart';
 import 'hall_of_fame_dialog.dart';
 
 const companionMessage =
-    'Chào Thuyền trưởng! Trong quá trình trải nghiệm nếu gặp lỗi hiển thị, dịch thuật hay sự cố, Thuyền trưởng có thể copy mã lỗi hoặc dùng tính năng Báo lỗi bằng hình ảnh để gửi phản hồi nhé!';
+    'Chào Thuyền trưởng! Thuyền trưởng thấy dịch thuật chỗ nào còn sai sót ư? Hãy chụp màn hình và gửi cho em để em sửa nhé! Ngoài ra Thuyền trưởng có thể copy mã lỗi hoặc dùng Báo lỗi hình ảnh để gửi phản hồi nhé!';
 
 class CompanionDialog extends StatefulWidget {
   const CompanionDialog({
     super.key,
     required this.onCopyError,
     required this.onOpenDeveloper,
+    this.onLaunchOverlay,
+    this.onTroubleshoot,
   });
   final Future<bool> Function() onCopyError;
   final Future<void> Function() onOpenDeveloper;
+  final VoidCallback? onLaunchOverlay;
+  final VoidCallback? onTroubleshoot;
   @override
   State<CompanionDialog> createState() => _CompanionDialogState();
 }
@@ -37,10 +41,7 @@ class _CompanionDialogState extends State<CompanionDialog> {
   }
 
   void _openBugReport() {
-    showDialog<void>(
-      context: context,
-      builder: (_) => const BugReportDialog(),
-    );
+    showDialog<void>(context: context, builder: (_) => const BugReportDialog());
   }
 
   void _openHallOfFame() {
@@ -99,9 +100,9 @@ class _CompanionDialogState extends State<CompanionDialog> {
               alignment: Alignment.centerLeft,
               child: Image.asset(
                 (MediaQuery.disableAnimationsOf(context) ||
-                        WidgetsBinding.instance.runtimeType
-                            .toString()
-                            .contains('Test'))
+                        WidgetsBinding.instance.runtimeType.toString().contains(
+                          'Test',
+                        ))
                     ? 'assets/companion_still.png'
                     : 'assets/companion.gif',
                 width: 164,
@@ -140,7 +141,7 @@ class _CompanionDialogState extends State<CompanionDialog> {
                         ),
                         children: [
                           const TextSpan(
-                            text: 'Chào Thuyền trưởng! Nếu gặp lỗi trong quá trình chơi hoặc cài đặt, Thuyền trưởng có thể ',
+                            text: 'Chào Thuyền trưởng! Nếu gặp lỗi hoặc thấy dịch thuật chỗ nào còn sai sót ư? Hãy chụp màn hình lại và gửi cho em qua nút Báo Lỗi bên dưới để em sửa ngay nhé! Hoặc Thuyền trưởng có thể ',
                           ),
                           WidgetSpan(
                             alignment: PlaceholderAlignment.middle,
@@ -181,10 +182,63 @@ class _CompanionDialogState extends State<CompanionDialog> {
                     ],
                     const SizedBox(height: 16),
 
-                    // Hai nút hành động: Báo Lỗi Bằng Hình Ảnh & Bảng Vinh Danh
+                    // Các nút hành động: Chibi Nổi, Báo Lỗi Bằng Hình Ảnh & Bảng Vinh Danh
+                    if (widget.onLaunchOverlay != null) ...[
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          widget.onLaunchOverlay!();
+                          Navigator.pop(context);
+                        },
+                        icon: const Icon(
+                          Icons.picture_in_picture_alt_rounded,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'Bật Chibi nổi khi chơi game (F9)',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1E5BB0),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (widget.onTroubleshoot != null) ...[
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          widget.onTroubleshoot!();
+                        },
+                        icon: const Icon(
+                          Icons.build_circle_outlined,
+                          size: 20,
+                        ),
+                        label: const Text(
+                          'Hướng Dẫn Sửa Lỗi Shizuku',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD48B37),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 11),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
                     ElevatedButton.icon(
                       onPressed: _openBugReport,
-                      icon: const Icon(Icons.add_photo_alternate_rounded, size: 20),
+                      icon: const Icon(
+                        Icons.add_photo_alternate_rounded,
+                        size: 20,
+                      ),
                       label: const Text(
                         'Báo Lỗi Bằng Hình Ảnh',
                         style: TextStyle(fontWeight: FontWeight.w700),
@@ -215,7 +269,10 @@ class _CompanionDialogState extends State<CompanionDialog> {
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFB03B50), width: 1.5),
+                        side: const BorderSide(
+                          color: Color(0xFFB03B50),
+                          width: 1.5,
+                        ),
                         backgroundColor: const Color(0xFFFFE3DC),
                         padding: const EdgeInsets.symmetric(vertical: 11),
                         shape: RoundedRectangleBorder(

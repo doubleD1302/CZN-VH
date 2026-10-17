@@ -5,13 +5,63 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Movie
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.view.*
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.Toast
+
+class AnimatedGifView(context: Context) : View(context) {
+    private var movie: Movie? = null
+    private var movieStart: Long = 0L
+
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null)
+    }
+
+    fun setGifBytes(data: ByteArray) {
+        movie = try {
+            Movie.decodeByteArray(data, 0, data.size)
+        } catch (_: Exception) {
+            null
+        }
+        movieStart = 0L
+        invalidate()
+    }
+
+    val isGifLoaded: Boolean get() = movie != null && (movie?.duration() ?: 0) > 0
+
+    override fun onDraw(canvas: Canvas) {
+        super.onDraw(canvas)
+        val m = movie ?: return
+        val now = SystemClock.uptimeMillis()
+        if (movieStart == 0L) {
+            movieStart = now
+        }
+        val dur = if (m.duration() > 0) m.duration() else 1000
+        val relTime = ((now - movieStart) % dur).toInt()
+        m.setTime(relTime)
+
+        val mw = m.width().coerceAtLeast(1)
+        val mh = m.height().coerceAtLeast(1)
+        val scale = Math.min(width.toFloat() / mw, height.toFloat() / mh)
+        val dx = (width - mw * scale) / 2f
+        val dy = (height - mh * scale) / 2f
+
+        canvas.save()
+        canvas.translate(dx, dy)
+        canvas.scale(scale, scale)
+        m.draw(canvas, 0f, 0f)
+        canvas.restore()
+
+        postInvalidateOnAnimation()
+    }
+}
 
 class ChibiOverlayService : Service() {
 
@@ -112,7 +162,7 @@ class ChibiOverlayService : Service() {
 
         try {
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val sizeDp = 152
+            val sizeDp = 76
             val sizePx = (sizeDp * resources.displayMetrics.density).toInt()
 
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -133,28 +183,48 @@ class ChibiOverlayService : Service() {
                 gravity = Gravity.TOP or Gravity.START
                 val prefs = getSharedPreferences("czn_settings", Context.MODE_PRIVATE)
                 val dm = resources.displayMetrics
-                val defaultX = (dm.widthPixels * 0.8).toInt().coerceAtLeast(0)
-                val defaultY = (dm.heightPixels * 0.35).toInt().coerceAtLeast(0)
+                val defaultX = (dm.widthPixels - sizePx - (12 * dm.density).toInt()).coerceAtLeast(0)
+                val defaultY = (dm.heightPixels * 0.4).toInt().coerceAtLeast(0)
                 x = prefs.getInt("overlay_x", defaultX)
                 y = prefs.getInt("overlay_y", defaultY)
             }
             layoutParams = params
 
             val container = FrameLayout(this)
-            val imageView = ImageView(this).apply {
-                layoutParams = FrameLayout.LayoutParams(
-                    FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT
-                )
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                val bitmap = loadChibiBitmap()
-                if (bitmap != null) {
-                    setImageBitmap(bitmap)
+            val gifBytes = loadChibiBytes()
+            if (gifBytes != null) {
+                val gifView = AnimatedGifView(this).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                    setGifBytes(gifBytes)
+                }
+                if (gifView.isGifLoaded) {
+                    container.addView(gifView)
                 } else {
+                    val fallbackBmp = BitmapFactory.decodeByteArray(gifBytes, 0, gifBytes.size)
+                    val iv = ImageView(this).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
+                            FrameLayout.LayoutParams.MATCH_PARENT
+                        )
+                        scaleType = ImageView.ScaleType.FIT_CENTER
+                        if (fallbackBmp != null) setImageBitmap(fallbackBmp) else setImageResource(R.mipmap.ic_launcher_czn)
+                    }
+                    container.addView(iv)
+                }
+            } else {
+                val iv = ImageView(this).apply {
+                    layoutParams = FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.MATCH_PARENT,
+                        FrameLayout.LayoutParams.MATCH_PARENT
+                    )
+                    scaleType = ImageView.ScaleType.FIT_CENTER
                     setImageResource(R.mipmap.ic_launcher_czn)
                 }
+                container.addView(iv)
             }
-            container.addView(imageView)
 
             val touchSlop = ViewConfiguration.get(this).scaledTouchSlop
             var initialX = 0
@@ -194,11 +264,20 @@ class ChibiOverlayService : Service() {
                             v.performClick()
                             val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                                putExtra("open_companion_dialog", true)
                             }
                             if (launchIntent != null) {
                                 startActivity(launchIntent)
                             }
                         } else {
+                            val dm = resources.displayMetrics
+                            val maxX = (dm.widthPixels - sizePx).coerceAtLeast(0)
+                            val midScreen = dm.widthPixels / 2
+                            // Magnet snap to nearest edge
+                            val targetX = if (params.x + sizePx / 2 < midScreen) 0 else maxX
+                            params.x = targetX
+                            windowManager?.updateViewLayout(container, params)
+
                             getSharedPreferences("czn_settings", Context.MODE_PRIVATE).edit()
                                 .putInt("overlay_x", params.x)
                                 .putInt("overlay_y", params.y)
@@ -219,18 +298,18 @@ class ChibiOverlayService : Service() {
         }
     }
 
-    private fun loadChibiBitmap(): Bitmap? {
+    private fun loadChibiBytes(): ByteArray? {
         val candidates = listOf(
-            "flutter_assets/assets/companion_still.png",
             "flutter_assets/assets/companion.gif",
-            "assets/companion_still.png",
-            "assets/companion.gif"
+            "assets/companion.gif",
+            "flutter_assets/assets/companion_still.png",
+            "assets/companion_still.png"
         )
         for (path in candidates) {
             try {
                 assets.open(path).use { stream ->
-                    val bmp = BitmapFactory.decodeStream(stream)
-                    if (bmp != null) return bmp
+                    val b = stream.readBytes()
+                    if (b.isNotEmpty()) return b
                 }
             } catch (_: Exception) {}
         }

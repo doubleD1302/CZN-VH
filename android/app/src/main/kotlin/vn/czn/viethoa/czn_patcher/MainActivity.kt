@@ -19,19 +19,18 @@ class MainActivity : FlutterActivity() {
     private val io = Executors.newSingleThreadExecutor()
     private val ui = Handler(Looper.getMainLooper())
     private var events: EventChannel.EventSink? = null
-    private var remote: ICznService? = null
-    private var connecting: CompletableFuture<ICznService>? = null
     private var permissionResult: MethodChannel.Result? = null
     private val busy = AtomicBoolean(false)
     private val cancelled = AtomicBoolean(false)
-    private val args by lazy { Shizuku.UserServiceArgs(ComponentName(this, PatchUserService::class.java)).daemon(true).processNameSuffix("patch").tag("czn-community-patcher").version(appCode()).debuggable(false) }
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) { if(binder != null){remote=ICznService.Stub.asInterface(binder);connecting?.complete(remote)} }
-        override fun onServiceDisconnected(name: ComponentName?) { remote=null;connecting?.completeExceptionally(IllegalStateException("Shizuku đã ngắt kết nối."));connecting=null }
-    }
+    private val cacheReady = CompletableFuture<Unit>()
+    private val handoffLock = Any()
+    private val downloadHandoffs = mutableMapOf<String, Pair<File, UpdateCache.Lease>>()
+    private var handoffsClosed = false
     private val permissionListener = Shizuku.OnRequestPermissionResultListener { code, grant -> if(code==1400){permissionResult?.success(grant==PackageManager.PERMISSION_GRANTED);permissionResult=null} }
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        ShizukuServiceConnector.configure(applicationContext, appCode())
+        io.execute { try { ReleaseClient.cleanup(this) } finally { cacheReady.complete(Unit) } }
         Shizuku.addRequestPermissionResultListener(permissionListener)
         EventChannel(engine.dartExecutor.binaryMessenger,"vn.czn.viethoa/progress").setStreamHandler(object:EventChannel.StreamHandler{
             override fun onListen(arguments:Any?,sink:EventChannel.EventSink?){events=sink}
@@ -39,7 +38,7 @@ class MainActivity : FlutterActivity() {
         })
         MethodChannel(engine.dartExecutor.binaryMessenger,"vn.czn.viethoa/patcher").setMethodCallHandler { call,result ->
             when(call.method){
-                "status" -> result.success(status())
+                "status" -> { if(cacheReady.isDone) result.success(status()) else cacheReady.thenRun { ui.post { result.success(status()) } } }
                 "requestAccess" -> {try{if(!Shizuku.pingBinder())result.error("SHIZUKU","Hãy mở và khởi động Shizuku trước.",null)
                     else if(Shizuku.checkSelfPermission()==PackageManager.PERMISSION_GRANTED)result.success(true)
                     else if(permissionResult!=null)result.error("BUSY","Đang chờ cấp quyền.",null)
@@ -58,28 +57,83 @@ class MainActivity : FlutterActivity() {
                 "startChibiOverlay" -> {if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.M && !android.provider.Settings.canDrawOverlays(this)){result.error("PERMISSION","Chưa được cấp quyền hiển thị trên ứng dụng khác.",null)}else{val intent=Intent(this,ChibiOverlayService::class.java).apply{action=ChibiOverlayService.ACTION_START};if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.O)startForegroundService(intent) else startService(intent);result.success(true)}}
                 "stopChibiOverlay" -> {val intent=Intent(this,ChibiOverlayService::class.java).apply{action=ChibiOverlayService.ACTION_STOP};startService(intent);result.success(true)}
                 "isChibiOverlayRunning" -> {result.success(ChibiOverlayService.isRunning)}
+                "checkCompanionLaunchIntent" -> {
+                    val shouldOpen = intent?.getBooleanExtra("open_companion_dialog", false) == true
+                    if (shouldOpen) {
+                        intent?.removeExtra("open_companion_dialog")
+                    }
+                    result.success(shouldOpen)
+                }
                 else -> io.execute {try{val value:Any?=when(call.method){
                     "lastOperation" -> map(lastOperation())
                     "bundledInfo" -> map(ReleaseClient.verify(assets.open("bundled-release.json").bufferedReader().use{it.readText()}))
                     "cachedChannel" -> map(ReleaseClient.cached(this))
                     "checkUpdate" -> map(ReleaseClient.check(this))
                     "scanGame" -> {val state=JSONObject(service().inspect(gamePackage() ?: throw IllegalStateException("Chưa tìm thấy game CZN trên thiết bị.")));if(state.optBoolean("success") && !state.optBoolean("recovery_required"))getSharedPreferences("czn_settings",0).edit().putBoolean("recovery_needed",false).apply();map(state)}
-                    "downloadPatch", "downloadApp" -> {cancelled.set(false);val data=JSONObject(call.argument<String>("channelJson") ?: "{}");val trusted=ReleaseClient.check(this);val apk=call.method=="downloadApp";UpdatePolicy.sameDownload(data,trusted,apk);if(apk)require(UpdatePolicy.hasAppUpdate(trusted,appCode())){"Bạn đang dùng bản ứng dụng này hoặc mới hơn."};ReleaseClient.download(this,trusted,apk,cancelled){s,n->progress(s,n)}.absolutePath}
+                    "downloadPatch", "downloadApp" -> {
+                        cancelled.set(false)
+                        val data=JSONObject(call.argument<String>("channelJson") ?: "{}")
+                        val trusted=ReleaseClient.check(this)
+                        val apk=call.method=="downloadApp"
+                        UpdatePolicy.sameDownload(data,trusted,apk)
+                        if(apk)require(UpdatePolicy.hasAppUpdate(trusted,appCode())){"Bạn đang dùng bản ứng dụng này hoặc mới hơn."}
+                        val kind=if(apk) "app" else "patch"
+                        val target=File(UpdateCache.directory(filesDir),trusted.getString(kind+"_sha256")+if(apk) ".apk" else ".cznpatch")
+                        val handoff=UpdateCache.acquire(target)
+                        try {
+                            val file=ReleaseClient.download(this,trusted,apk,cancelled){s,n->progress(s,n)}
+                            synchronized(handoffLock) {
+                                if(handoffsClosed) handoff.close()
+                                else downloadHandoffs.put(kind,Pair(file,handoff))?.second?.close()
+                            }
+                            file.absolutePath
+                        } catch(error:Exception) { handoff.close();throw error }
+                    }
                     "installBundled", "installPatch", "restore" -> {if(!busy.compareAndSet(false,true))throw IllegalStateException("Có một giao dịch đang chạy.");try{recordOperation(call.method,JSONObject().put("phase","running").put("success",false).put("message","Đang xử lý; chưa có xác nhận cài thành công."));
                         val pkg=gamePackage() ?: throw IllegalStateException("Chưa cài CZN.");val readiness=JSONObject(service().inspect(pkg));require(readiness.optBoolean("success")){readiness.optString("message","Chưa tìm được dữ liệu game.")};getSharedPreferences("czn_settings",0).edit().putBoolean("recovery_needed",true).commit();val callback=object:IPatchProgress.Stub(){override fun report(label:String?,percent:Int){progress(label ?: "Đang xử lý",percent)}}
-                        val text=if(call.method=="restore")service().restore(pkg,callback)else{val zip=if(call.method=="installBundled"){val f=File(filesDir,"bundled.cznpatch");assets.open("bundled.cznpatch").use{input->f.outputStream().use{input.copyTo(it)}};f}else File(call.argument<String>("path") ?: "");require(zip.isFile && zip.length()<=33554432L){"Gói bản dịch không hợp lệ hoặc vượt 32 MB."};ParcelFileDescriptor.open(zip,ParcelFileDescriptor.MODE_READ_ONLY).use{service().install(pkg,it,callback)}}
+                        val text=if(call.method=="restore")service().restore(pkg,callback)else{
+                            val bundled=call.method=="installBundled"
+                            val zip=if(bundled) File(cacheDir,"bundled-${java.util.UUID.randomUUID()}.cznpatch") else File(call.argument<String>("path") ?: "")
+                            UpdateCache.acquire(zip).use {
+                                consumeDownload(zip)
+                                try {
+                                    if(bundled) assets.open("bundled.cznpatch").use { input -> zip.outputStream().use { input.copyTo(it) } }
+                                    require(zip.isFile && zip.length()<=33554432L){"Gói bản dịch không hợp lệ hoặc vượt 32 MB."}
+                                    ParcelFileDescriptor.open(zip,ParcelFileDescriptor.MODE_READ_ONLY).use { service().install(pkg,it,callback) }
+                                } finally { if(bundled) zip.delete() }
+                            }
+                        }
                         val response=JSONObject(text);val checked=try{JSONObject(service().inspect(pkg))}catch(postError:Exception){JSONObject().put("success",false).put("error_code","POST_INSPECT_FAILED").put("message",postError.message ?: "Không đọc lại được dữ liệu sau thao tác.")};response.put("post_install",checked);if(response.optBoolean("success") && !(checked.optBoolean("success") && !checked.optBoolean("recovery_required") && (if(call.method=="restore") !checked.has("installed_version") else checked.optBoolean("files_match") && checked.optInt("installed_code",0)>0 && checked.optInt("installed_code")==response.optInt("version_code",-1) && checked.optString("installed_version").isNotEmpty() && checked.optString("installed_version")==response.optString("version")))){response.put("success",false).put("error_code","POST_INSTALL_UNVERIFIED").put("message","Chưa xác minh được dữ liệu sau cài. Chưa đánh dấu cài thành công; kiểm tra báo cáo trước khi mở game.")};if(response.optBoolean("success"))response.put("message",if(call.method=="restore") "Đã khôi phục đầy đủ bản gốc." else "Cài thành công bản "+response.optString("version")+". Dữ liệu sau cài đã khớp; chọn 日本語 trong game.");recordOperation(call.method,response.put("phase",if(response.optBoolean("success")) "completed" else "failed"));if(checked.optBoolean("success") && !checked.optBoolean("recovery_required"))getSharedPreferences("czn_settings",0).edit().putBoolean("recovery_needed",false).commit();if(response.optBoolean("success")){getSharedPreferences("czn_settings",0).edit().putInt("installed_code",checked.optInt("installed_code",0)).apply()};map(response)
                     }finally{busy.set(false)}}
                     "installApp" -> openAppInstaller(File(call.argument<String>("path") ?: ""))
-                    "resumeAppUpdate" -> {val prefs=getSharedPreferences("czn_settings",0);val path=prefs.getString("pending_app_update",null) ?: throw IllegalStateException("Chưa có APK chờ cài.");prefs.edit().remove("pending_app_update").commit();openAppInstaller(File(path))}
+                    "resumeAppUpdate" -> {val prefs=getSharedPreferences("czn_settings",0);val path=prefs.getString("pending_app_update",null) ?: throw IllegalStateException("Chưa có APK chờ cài.");openAppInstaller(File(path))}
                     else -> throw UnsupportedOperationException("Phương thức chưa hỗ trợ.")
-                };ui.post{result.success(value)}}catch(e:Exception){if(call.method in listOf("installBundled","installPatch","restore")){try{recordOperation(call.method,JSONObject().put("phase","failed").put("success",false).put("message",e.cause?.message ?: e.message ?: "Thao tác chưa hoàn tất.").put("error_code","NATIVE_EXCEPTION"))}catch(ignored:Exception){}};ui.post{result.error("CZN",if(e is DeadObjectException || e.cause is DeadObjectException) "Shizuku đã ngắt kết nối. Bấm kiểm tra lại hoặc phục hồi trước khi mở game." else (e.cause?.message ?: e.message ?: "Kết nối chưa hoàn tất. Bấm kiểm tra lại và thử lại thao tác."),null)}} }
+                };ui.post{result.success(value)}}catch(e:Exception){replyFailure(call.method,result,e)} }
             }
         }
         scheduleUpdates()
     }
+    private fun replyFailure(action: String, result: MethodChannel.Result, error: Exception) {
+        var cause: Throwable = error
+        while ((cause is ExecutionException || cause is CompletionException) && cause.cause != null) cause = cause.cause!!
+        val failure = cause as? ShizukuServiceConnector.Failure
+        val code = failure?.code ?: if (cause is DeadObjectException) "SHIZUKU_SERVICE_DIED" else if (cause is TimeoutException) "NATIVE_TIMEOUT" else "NATIVE_EXCEPTION"
+        val message = failure?.message ?: if (cause is DeadObjectException) "Dịch vụ vá đã ngắt kết nối. Bấm kiểm tra lại; kiểm tra báo cáo trước khi mở game." else cause.message ?: "Thao tác chưa hoàn tất."
+        val details = failure?.diagnostics ?: ShizukuServiceConnector.diagnostics()
+        if (action in listOf("installBundled", "installPatch", "restore")) {
+            try { recordOperation(action, JSONObject().put("phase", "failed").put("success", false).put("message", message).put("error_code", code).put("diagnostics", JSONObject(details))) } catch (_: Exception) {}
+        }
+        ui.post { result.error(code, message, details) }
+    }
     private fun lastOperation():JSONObject {val f=File(filesDir,"last-operation.json");return if(f.isFile)JSONObject(f.readText()) else JSONObject()}
-    private fun openAppInstaller(file:File):Map<String,Any?> {
+    private fun consumeDownload(file:File) {
+        synchronized(handoffLock) {
+            val keys=downloadHandoffs.filterValues { it.first.canonicalFile==file.canonicalFile }.keys.toList()
+            keys.forEach { downloadHandoffs.remove(it)?.second?.close() }
+        }
+    }
+    private fun openAppInstaller(file:File):Map<String,Any?> = UpdateCache.acquire(file).use { consumeDownload(file);openVerifiedAppInstaller(file) }
+    private fun openVerifiedAppInstaller(file:File):Map<String,Any?> {
         require(file.isFile && file.canonicalPath.startsWith(File(filesDir,"updates").canonicalPath+File.separator) && file.name.endsWith(".apk")){"APK không nằm trong bộ nhớ cập nhật của app."}
         // The download was authorized by this signed cache. Installation still works offline.
         val channel=ReleaseClient.cached(this)
@@ -94,6 +148,7 @@ class MainActivity : FlutterActivity() {
         }
         val code=if(Build.VERSION.SDK_INT>=28)archive.longVersionCode else @Suppress("DEPRECATION") archive.versionCode.toLong()
         UpdatePolicy.verifyApkIdentity(channel,appCode(),packageName,archive.packageName,code,archive.versionName,certs(installed),certs(archive))
+        ReleaseClient.holdForInstaller(this,file,code)
         val launch=CompletableFuture<Map<String,Any?>>()
         ui.post {
             try {
@@ -117,8 +172,25 @@ class MainActivity : FlutterActivity() {
     private fun appCode():Int {val info=packageManager.getPackageInfo(packageName,0);return if(Build.VERSION.SDK_INT>=28)info.longVersionCode.toInt() else @Suppress("DEPRECATION") info.versionCode}
     private fun installedGames():List<Map<String,Any?>> = PatchUserService.PACKAGES.sorted().mapNotNull { pkg -> try{val info=packageManager.getPackageInfo(pkg,0);mapOf("package" to pkg,"name" to packageManager.getApplicationLabel(info.applicationInfo!!).toString(),"version" to info.versionName,"installer" to @Suppress("DEPRECATION") packageManager.getInstallerPackageName(pkg))}catch(e:PackageManager.NameNotFoundException){null} }
     private fun gamePackage():String? {val games=installedGames();val selected=getSharedPreferences("czn_settings",0).getString("selected_game",null);return games.firstOrNull{it["package"]==selected}?.get("package") as String? ?: games.firstOrNull()?.get("package") as String?}
-    private fun status():Map<String,Any?> {val prefs=getSharedPreferences("czn_settings",0);val running=try{Shizuku.pingBinder()}catch(e:Exception){false};val granted=running && try{Shizuku.checkSelfPermission()==PackageManager.PERMISSION_GRANTED}catch(e:Exception){false};val canOverlay=if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.M) android.provider.Settings.canDrawOverlays(this) else true;return mapOf("package" to gamePackage(),"games" to installedGames(),"manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"shizukuRunning" to running,"accessGranted" to granted,"autoDownload" to prefs.getBoolean("auto_download",true),"downloadedAppCode" to prefs.getInt("downloaded_app_code",0),"downloadedPatchCode" to prefs.getInt("downloaded_patch_code",0),"channel" to prefs.getString("channel",ReleaseClient.DEFAULT_CHANNEL),"appCode" to appCode(),"appVersion" to packageManager.getPackageInfo(packageName,0).versionName,"android" to Build.VERSION.RELEASE,"androidUser" to android.os.Process.myUid()/100000,"noticeSnoozeId" to prefs.getString("notice_snooze_id",""),"noticeSnoozeUntil" to prefs.getLong("notice_snooze_until",0),"recoveryPending" to prefs.getBoolean("recovery_needed",false),"appInstallAllowed" to packageManager.canRequestPackageInstalls(),"pendingAppUpdate" to prefs.contains("pending_app_update"),"overlayRunning" to ChibiOverlayService.isRunning,"canDrawOverlays" to canOverlay)}
-    private fun service():ICznService {check(android.os.Process.myUid()/100000==0){"Patcher chỉ hỗ trợ hồ sơ Android chính. Không dùng Không gian thứ hai/Ứng dụng kép."};remote?.let{if(it.asBinder().isBinderAlive)return it};check(Shizuku.pingBinder() && Shizuku.checkSelfPermission()==PackageManager.PERMISSION_GRANTED){"Cần khởi động Shizuku và cấp quyền cho CZN Việt Hóa."};val future=CompletableFuture<ICznService>();connecting=future;ui.post{try{Shizuku.bindUserService(args,connection)}catch(e:Exception){future.completeExceptionally(e)}};return future.get(20,TimeUnit.SECONDS)}
+    private fun status():Map<String,Any?> {val prefs=getSharedPreferences("czn_settings",0);val running=try{Shizuku.pingBinder()}catch(e:Exception){false};val granted=running && try{Shizuku.checkSelfPermission()==PackageManager.PERMISSION_GRANTED}catch(e:Exception){false};val canOverlay=if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.M) android.provider.Settings.canDrawOverlays(this) else true;return mapOf("package" to gamePackage(),"games" to installedGames(),"manufacturer" to Build.MANUFACTURER,"model" to Build.MODEL,"shizukuRunning" to running,"accessGranted" to granted,"autoDownload" to prefs.getBoolean("auto_download",true),"downloadedAppCode" to prefs.getInt("downloaded_app_code",0),"downloadedPatchCode" to prefs.getInt("downloaded_patch_code",0),"channel" to prefs.getString("channel",ReleaseClient.DEFAULT_CHANNEL),"appCode" to appCode(),"appVersion" to packageManager.getPackageInfo(packageName,0).versionName,"android" to Build.VERSION.RELEASE,"androidUser" to android.os.Process.myUid()/100000,"noticeSnoozeId" to prefs.getString("notice_snooze_id",""),"noticeSnoozeUntil" to prefs.getLong("notice_snooze_until",0),"recoveryPending" to prefs.getBoolean("recovery_needed",false),"appInstallAllowed" to packageManager.canRequestPackageInstalls(),"pendingAppUpdate" to prefs.contains("pending_app_update"),"overlayRunning" to ChibiOverlayService.isRunning,"canDrawOverlays" to canOverlay,"shizukuService" to ShizukuServiceConnector.diagnostics())}
+    private fun service():ICznService = ShizukuServiceConnector.get()
     private fun scheduleUpdates(){val enabled=getSharedPreferences("czn_settings",0).getBoolean("auto_download",true);val wm=WorkManager.getInstance(this);if(!enabled){wm.cancelUniqueWork("czn-updates");return};val constraints=Constraints.Builder().setRequiredNetworkType(NetworkType.UNMETERED).setRequiresStorageNotLow(true).build();val request=PeriodicWorkRequest.Builder(UpdateWorker::class.java,12,TimeUnit.HOURS).setConstraints(constraints).build();wm.enqueueUniquePeriodicWork("czn-updates",ExistingPeriodicWorkPolicy.KEEP,request)}
-    override fun onDestroy(){Shizuku.removeRequestPermissionResultListener(permissionListener);super.onDestroy()}
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleCompanionIntent(intent)
+    }
+    override fun onResume() {
+        super.onResume()
+        handleCompanionIntent(intent)
+    }
+    private fun handleCompanionIntent(i: Intent?) {
+        if (i?.getBooleanExtra("open_companion_dialog", false) == true) {
+            i.removeExtra("open_companion_dialog")
+            flutterEngine?.dartExecutor?.binaryMessenger?.let { messenger ->
+                MethodChannel(messenger, "vn.czn.viethoa/patcher").invokeMethod("openCompanionDialog", null)
+            }
+        }
+    }
+    override fun onDestroy(){synchronized(handoffLock){handoffsClosed=true;downloadHandoffs.values.forEach{it.second.close()};downloadHandoffs.clear()};Shizuku.removeRequestPermissionResultListener(permissionListener);super.onDestroy()}
 }

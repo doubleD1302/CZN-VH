@@ -19,6 +19,7 @@ import 'czn_tools_backdrop.dart';
 import 'czn_companion.dart';
 import 'czn_landing.dart';
 import 'companion_dialog.dart';
+import 'shizuku_troubleshoot_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -79,11 +80,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     unawaited(_loadCompanionSetting());
     if (!WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
+      NativeBridge.channel.setMethodCallHandler((call) async {
+        if (call.method == 'openCompanionDialog') {
+          if (mounted) {
+            _showCompanionChat();
+          }
+        }
+      });
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _checkAndShowExitGameNotice();
+        _checkCompanionIntent();
       });
     }
     _refresh();
+  }
+
+  Future<void> _checkCompanionIntent() async {
+    if (WidgetsBinding.instance.runtimeType.toString().contains('Test')) return;
+    try {
+      final shouldOpen = await NativeBridge.checkCompanionLaunchIntent();
+      if (shouldOpen && mounted) {
+        _showCompanionChat();
+      }
+    } catch (_) {}
   }
 
   Future<void> _checkAndShowExitGameNotice() async {
@@ -108,7 +127,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Color(0xFFE5A93C), size: 26),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Color(0xFFE5A93C),
+                size: 26,
+              ),
               SizedBox(width: 8),
               Text(
                 'LƯU Ý QUAN TRỌNG',
@@ -128,14 +151,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               height: 1.45,
             ),
           ),
-          actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          actionsPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 12,
+          ),
           actions: [
             TextButton(
               onPressed: () async {
                 final p = await SharedPreferences.getInstance();
                 await p.setInt(
                   'dismiss_exit_game_notice_until',
-                  DateTime.now().add(const Duration(hours: 24)).millisecondsSinceEpoch,
+                  DateTime.now()
+                      .add(const Duration(hours: 24))
+                      .millisecondsSinceEpoch,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
               },
@@ -205,6 +233,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _noticeRequested = true;
       _noticeShown = null;
     }
+    if (state == AppLifecycleState.resumed) {
+      _checkCompanionIntent();
+    }
     if (state == AppLifecycleState.resumed && _appUpdating) {
       _refreshPending = true;
     }
@@ -231,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
       try {
         final last = await NativeBridge.map('lastOperation');
-        if (mounted && last.isNotEmpty) {
+        if (mounted && last.isNotEmpty && _lastOperation.isEmpty) {
           setState(() {
             _lastOperation = last;
             _message =
@@ -266,7 +297,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         } catch (e) {
           if (mounted) {
             setState(() {
-              _game = {'success': false, 'message': _error(e)};
+              _game = {
+                'success': false,
+                'message': _error(e),
+                'error_code': e is PlatformException ? e.code : 'APP_ERROR',
+                if (e is PlatformException) 'diagnostics': e.details,
+              };
               _message = _error(e);
             });
           }
@@ -281,9 +317,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         if (mounted) {
           setState(() {
             _remote = channel;
-            final appNew = !_isPc &&
+            final appNew =
+                !_isPc &&
                 (channel.data['app_code'] as int? ?? 0) >
-                (_status['appCode'] as int? ?? 10612);
+                    (_status['appCode'] as int? ?? 10612);
             final patchNew =
                 channel.code >
                 (_game['installed_code'] as int? ?? _bundled?.code ?? 0);
@@ -392,6 +429,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         : e.toString().replaceFirst('Exception: ', '');
   }
 
+  bool _isConnectionOrShizukuError(String msg) {
+    final lower = msg.toLowerCase();
+    return lower.contains('kết nối') ||
+        lower.contains('shizuku') ||
+        lower.contains('timeout') ||
+        lower.contains('thời gian chờ');
+  }
+
+  void _showShizukuTroubleshoot() {
+    ShizukuTroubleshootDialog.show(context, onCopyReport: _copyReport);
+  }
+
   Future<void> _access() async {
     try {
       if (_status['shizukuRunning'] != true) {
@@ -427,9 +476,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
     var finished = false;
     Map<String, dynamic> response = {};
-    final subscription = NativeBridge.progressEvents.listen((
-      event,
-    ) {
+    final subscription = NativeBridge.progressEvents.listen((event) {
       if (mounted && !finished) {
         final data = Map<String, dynamic>.from(event as Map);
         setState(() {
@@ -493,19 +540,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } finally {
       finished = true;
       unawaited(subscription.cancel().catchError((Object _) {}));
-      Map<String, dynamic> last = {};
-      try {
-        if (action != 'appUpdate') {
-          last = await NativeBridge.map('lastOperation');
-        }
-      } catch (_) {}
       if (mounted) {
         try {
           _status = await NativeBridge.map('status');
         } catch (_) {}
         setState(() {
           _lastOperation = {
-            ...last,
             ...response,
             'action': action,
             'phase': success ? 'completed' : 'failed',
@@ -535,6 +575,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           content: SingleChildScrollView(child: Text(_message)),
           actions: [
+            if (!success && !_isPc && _isConnectionOrShizukuError(_message))
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFFE8C170),
+                  foregroundColor: const Color(0xFF161526),
+                ),
+                icon: const Icon(Icons.build_circle_outlined, size: 16),
+                label: const Text('Hướng dẫn sửa lỗi'),
+                onPressed: () {
+                  Navigator.pop(c);
+                  _showShizukuTroubleshoot();
+                },
+              ),
             if (!success)
               TextButton(
                 onPressed: _copyReport,
@@ -553,10 +606,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _install() async {
     if (!_isPc &&
         AppUpdateInfo.fromChannel(
-          _remote?.data,
-          _status['appCode'] as int? ?? 10612,
-        ) !=
-        null) {
+              _remote?.data,
+              _status['appCode'] as int? ?? 10612,
+            ) !=
+            null) {
       await _updateApp();
       return;
     }
@@ -568,13 +621,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (_remote != null &&
           _bundled != null &&
           _remote!.code > _bundled!.code) {
-        setState(() => _downloading = true);
-        final path = await NativeBridge.download(_remote!.data);
-        if (!mounted) {
-          throw Exception('Ứng dụng đã đóng; gói tải được giữ để cài sau.');
+        try {
+          setState(() => _downloading = true);
+          final path = await NativeBridge.download(_remote!.data);
+          if (!mounted) {
+            throw Exception('Ứng dụng đã đóng; gói tải được giữ để cài sau.');
+          }
+          setState(() => _downloading = false);
+          return await NativeBridge.map('installPatch', {'path': path});
+        } catch (e) {
+          if (_isPc) {
+            setState(() => _downloading = false);
+            return NativeBridge.map('installBundled');
+          }
+          rethrow;
         }
-        setState(() => _downloading = false);
-        return NativeBridge.map('installPatch', {'path': path});
       }
       return NativeBridge.map('installBundled');
     });
@@ -634,7 +695,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final rawUrl = release?.data['app_url'] as String?;
       if (rawUrl != null && rawUrl.isNotEmpty) {
         final uri = Uri.tryParse(rawUrl);
-        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (uri != null) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
       }
       return;
     }
@@ -657,9 +720,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           : 'Đang tải APK cập nhật…';
     });
     var finished = false;
-    final subscription = NativeBridge.progressEvents.listen((
-      event,
-    ) {
+    final subscription = NativeBridge.progressEvents.listen((event) {
       if (!mounted || finished) return;
       final data = Map<String, dynamic>.from(event as Map);
       setState(() {
@@ -790,15 +851,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<bool> _copyReport() async {
     try {
+      // Startup log capture finishes asynchronously after a failed service bind.
+      // Read current diagnostics rather than the UI's earlier status snapshot.
+      Map<String, dynamic> reportStatus = _status;
+      try {
+        reportStatus = await NativeBridge.map('status');
+      } catch (_) {}
       await Clipboard.setData(
         ClipboardData(
           text: const JsonEncoder.withIndent('  ').convert({
-            'app': _status['appVersion'] ?? '1.6.12',
+            'app': reportStatus['appVersion'] ?? '1.6.12',
+            'report_time': DateTime.now().toUtc().toIso8601String(),
             'error_code':
-                _lastOperation['error_code'] ??
+                (_lastErrorCode.isNotEmpty ? _lastErrorCode : null) ??
                 _game['error_code'] ??
-                (_lastErrorCode.isEmpty ? 'CHUA_CO_LOI' : _lastErrorCode),
-            'status': _status,
+                _lastOperation['error_code'] ??
+                'CHUA_CO_LOI',
+            'status': reportStatus,
             'game': _game,
             'lastOperation': _lastOperation,
             'message': _message,
@@ -830,6 +899,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       builder: (_) => CompanionDialog(
         onCopyError: _copyReport,
         onOpenDeveloper: _openDeveloperProfile,
+        onTroubleshoot: _isPc ? null : _showShizukuTroubleshoot,
+        onLaunchOverlay: () async {
+          try {
+            final canDraw = await NativeBridge.canDrawOverlays();
+            if (!canDraw) {
+              await NativeBridge.requestOverlayPermission();
+            } else {
+              await NativeBridge.startChibiOverlay();
+            }
+          } catch (_) {}
+        },
       ),
     );
   }
@@ -883,13 +963,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _remote != null && (_bundled == null || _remote!.code >= _bundled!.code)
         ? _remote
         : _bundled;
-    final appNew = !_isPc &&
+    final appNew =
+        !_isPc &&
         AppUpdateInfo.fromChannel(
-          _remote?.data,
-          _status['appCode'] as int? ?? 10612,
-        ) !=
-        null;
-    final patchHasUpdate = _remote != null &&
+              _remote?.data,
+              _status['appCode'] as int? ?? 10612,
+            ) !=
+            null;
+    final patchHasUpdate =
+        _remote != null &&
         (_game['installed_code'] as int? ?? 0) > 0 &&
         _remote!.code > (_game['installed_code'] as int);
     final label = appNew
@@ -900,8 +982,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ? (_isPc ? 'Chọn thư mục game' : 'Cài tiếng Việt')
         : installed
         ? (_isPc
-            ? (patchHasUpdate ? 'Cập nhật bản dịch' : 'VÀO GAME CZN')
-            : 'Cập nhật bản dịch')
+              ? (patchHasUpdate ? 'Cập nhật bản dịch' : 'VÀO GAME CZN')
+              : 'Cập nhật bản dịch')
         : 'Cài tiếng Việt';
     return Scaffold(
       body: CznCompanion(
@@ -919,6 +1001,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         onHide: _hideCompanion,
         onTap: _showCompanionChat,
         child: CznLanding(
+          isPc: _isPc,
           patchVersion: latest?.version ?? 'Đang đọc…',
           appVersion: _status['appVersion'] as String? ?? '1.6.12',
           access: access,
@@ -929,6 +1012,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           message: _appUpdateMessage.isNotEmpty ? _appUpdateMessage : _message,
           showMessage:
               _appUpdateMessage.isNotEmpty || _lastErrorCode.isNotEmpty,
+          onTroubleshoot: _isPc ? null : _showShizukuTroubleshoot,
           primaryLabel: label,
           onPrimary: _busy || _checking
               ? null
@@ -939,7 +1023,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     unawaited(_restore());
                   } else if (!access || !ready) {
                     if (_isPc) {
-                      NativeBridge.action('chooseGameDir').then((_) => _refresh());
+                      NativeBridge.action('chooseGameDir')
+                          .then((_) => _refresh());
                     } else {
                       _openTools(0);
                     }
@@ -965,6 +1050,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _launchGame() async {
     try {
+      if (!WidgetsBinding.instance.runtimeType.toString().contains('Test')) {
+        final prefs = await SharedPreferences.getInstance();
+        final overlayPref = prefs.getBool('companion_overlay') ?? true;
+        if (overlayPref) {
+          final canDraw = await NativeBridge.canDrawOverlays();
+          if (canDraw) {
+            unawaited(NativeBridge.startChibiOverlay());
+          }
+        }
+      }
       final opened = await NativeBridge.action('launchGame');
       if (!opened) {
         await launchUrl(

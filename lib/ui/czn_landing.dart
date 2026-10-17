@@ -23,7 +23,12 @@ class CznLanding extends StatelessWidget {
     required this.onHelp,
     this.onSettings,
     this.onNotice,
+    this.onTroubleshoot,
+    this.primaryKey,
+    this.isPc = false,
   });
+  final Key? primaryKey;
+  final bool isPc;
   final String patchVersion, appVersion, message, primaryLabel;
   final bool access, ready, installed, busy, checking, showMessage;
   final VoidCallback? onPrimary,
@@ -31,7 +36,8 @@ class CznLanding extends StatelessWidget {
       onUpdates,
       onHelp,
       onSettings,
-      onNotice;
+      onNotice,
+      onTroubleshoot;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -49,13 +55,41 @@ class CznLanding extends StatelessWidget {
               const SizedBox(height: 5),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(
-                  'Bản dịch $patchVersion',
-                  style: const TextStyle(
-                    color: glassIvory,
-                    fontSize: 10,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 4)],
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0x33E0C88F),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: const Color(0x88E0C88F),
+                          width: 0.8,
+                        ),
+                      ),
+                      child: Text(
+                        appVersion,
+                        style: const TextStyle(
+                          color: Color(0xFFF0E6D2),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Bản dịch $patchVersion',
+                      style: const TextStyle(
+                        color: glassIvory,
+                        fontSize: 10,
+                        shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -88,6 +122,8 @@ class CznLanding extends StatelessWidget {
             ? 'Đang xử lý…'
             : installed
             ? 'Đã cài tiếng Việt'
+            : isPc
+            ? (!ready ? 'Chưa tìm thấy game' : 'Sẵn sàng')
             : !access
             ? 'Chưa kết nối Shizuku'
             : !ready
@@ -122,11 +158,20 @@ class CznLanding extends StatelessWidget {
           ),
         );
         final primary = CznGlassPrimary(
-          key: const Key('landing-primary'),
+          key:
+              primaryKey ??
+              (isPc
+                  ? const Key('windows-one-click')
+                  : const Key('landing-primary')),
           label: primaryLabel,
           onPressed: onPrimary,
           compact: compact,
         );
+        final isConnectionError =
+            !isPc &&
+            (message.contains('Kết nối') ||
+                message.contains('Shizuku') ||
+                message.contains('thời gian chờ'));
         final information = busy || checking || showMessage
             ? Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -136,7 +181,9 @@ class CznLanding extends StatelessWidget {
                     color: const Color(0xCC171524),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: glassIvory.withValues(alpha: .45),
+                      color: isConnectionError
+                          ? const Color(0xFFF58220)
+                          : glassIvory.withValues(alpha: .45),
                     ),
                   ),
                   child: Column(
@@ -145,11 +192,44 @@ class CznLanding extends StatelessWidget {
                       if (busy || checking) const LinearProgressIndicator(),
                       Text(
                         message,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: const TextStyle(color: glassIvory, fontSize: 12),
                       ),
+                      if (isConnectionError && onTroubleshoot != null) ...[
+                        const SizedBox(height: 6),
+                        InkWell(
+                          onTap: onTroubleshoot,
+                          borderRadius: BorderRadius.circular(6),
+                          child: const Padding(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.build_circle_outlined,
+                                  size: 14,
+                                  color: Color(0xFFE8C170),
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  'Xem hướng dẫn sửa lỗi kết nối',
+                                  style: TextStyle(
+                                    color: Color(0xFFE8C170),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.bold,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

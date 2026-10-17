@@ -131,16 +131,18 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
             helper: isPc
                 ? (_ready ? 'Đã nhận diện thư mục game' : 'Chưa tìm thấy game')
                 : (_access
-                    ? 'Đã kết nối'
-                    : widget.status['shizukuRunning'] == true
-                    ? 'Chưa cấp quyền'
-                    : 'Chưa kết nối'),
+                      ? 'Đã kết nối'
+                      : widget.status['shizukuRunning'] == true
+                      ? 'Chưa cấp quyền'
+                      : 'Chưa kết nối'),
             done: isPc ? _ready : _access,
-            actionLabel: isPc ? 'Chọn thư mục' : (_access
-                ? 'Mở Shizuku'
-                : widget.status['shizukuRunning'] == true
-                ? 'Cấp quyền'
-                : 'Mở Shizuku'),
+            actionLabel: isPc
+                ? 'Chọn thư mục'
+                : (_access
+                      ? 'Mở Shizuku'
+                      : widget.status['shizukuRunning'] == true
+                      ? 'Cấp quyền'
+                      : 'Mở Shizuku'),
             onPressed: isPc
                 ? () async {
                     await NativeBridge.action('chooseGameDir');
@@ -154,7 +156,9 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
             title: isPc ? 'Dữ liệu CZN' : 'Dữ liệu game',
             glyph: CznToolsGlyph16.folder,
             helper: isPc
-                ? (_ready ? 'Sẵn sàng cài đặt' : 'Cần tải đủ dữ liệu game qua STOVE.')
+                ? (_ready
+                      ? 'Sẵn sàng cài đặt'
+                      : 'Cần tải đủ dữ liệu game qua STOVE.')
                 : 'Chọn 日本語 trong game.',
             done: _ready,
             actionLabel: 'Kiểm tra lại dữ liệu',
