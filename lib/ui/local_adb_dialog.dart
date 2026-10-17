@@ -24,6 +24,7 @@ class LocalAdbDialog extends StatefulWidget {
 }
 
 class _LocalAdbDialogState extends State<LocalAdbDialog> {
+  final _hostController = TextEditingController();
   final _connectPortController = TextEditingController();
   final _pairingPortController = TextEditingController();
   final _pairingCodeController = TextEditingController();
@@ -36,6 +37,13 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
     super.initState();
     _connectPortController.addListener(_onPortChanged);
     _pairingPortController.addListener(_onPortChanged);
+    NativeBridge.getWifiIp().then((ip) {
+      if (mounted && ip != null && ip.trim().isNotEmpty) {
+        setState(() {
+          _hostController.text = ip.trim();
+        });
+      }
+    });
   }
 
   void _onPortChanged() {
@@ -46,6 +54,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
   void dispose() {
     _connectPortController.removeListener(_onPortChanged);
     _pairingPortController.removeListener(_onPortChanged);
+    _hostController.dispose();
     _connectPortController.dispose();
     _pairingPortController.dispose();
     _pairingCodeController.dispose();
@@ -124,6 +133,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
 
     int connPort = 0;
     int pairPort = 0;
+    final host = _hostController.text.trim().isEmpty ? null : _hostController.text.trim();
 
     try {
       connPort = int.tryParse(_connectPortController.text.trim()) ?? 0;
@@ -150,13 +160,13 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
           );
         }
 
-        final paired = await NativeBridge.pairLocalAdb(pairPort, code);
+        final paired = await NativeBridge.pairLocalAdb(pairPort, code, host: host);
         if (!paired) {
           throw Exception('Ghép nối thất bại. Hãy kiểm tra lại Cổng ghép nối và Mã 6 số.');
         }
       }
 
-      final connected = await NativeBridge.connectLocalAdb(connPort);
+      final connected = await NativeBridge.connectLocalAdb(connPort, host: host);
       if (!connected) {
         throw Exception('Kết nối thất bại. Hãy kiểm tra lại Cổng kết nối ($connPort).');
       }
@@ -378,7 +388,31 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    // Host / IP Address Field
+                    TextField(
+                      controller: _hostController,
+                      keyboardType: TextInputType.text,
+                      style: const TextStyle(color: Color(0xFFFAF7EE)),
+                      decoration: InputDecoration(
+                        labelText: 'Địa chỉ IP thiết bị (Host)',
+                        labelStyle: const TextStyle(color: Color(0xFFE8C170)),
+                        helperText: 'Tự nhận diện theo Wi-Fi (ví dụ: 192.168.3.105 hoặc 127.0.0.1)',
+                        helperStyle: const TextStyle(color: Color(0xFF8E88AB), fontSize: 10.5),
+                        hintText: '127.0.0.1',
+                        hintStyle: const TextStyle(color: Color(0xFF6B6584)),
+                        filled: true,
+                        fillColor: const Color(0xFF1E1B2E),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF332D4E)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: const BorderSide(color: Color(0xFF332D4E)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
 
                     // Connection Port Field
                     TextField(

@@ -43,12 +43,14 @@ class MainActivity : FlutterActivity() {
             when(call.method){
                 "status" -> { if(cacheReady.isDone) result.success(status()) else cacheReady.thenRun { ui.post { result.success(status()) } } }
                 "isLocalAdbConnected" -> result.success(LocalAdbManager.isLocalConnected())
+                "getWifiIp" -> result.success(LocalAdbManager.getLocalWifiIp())
                 "pairLocalAdb" -> {
+                    val host = call.argument<String>("host")?.trim()?.ifEmpty { null }
                     val port = call.argument<Int>("port") ?: 0
                     val code = call.argument<String>("code") ?: ""
                     io.execute {
                         try {
-                            val ok = LocalAdbManager.pairDevice(port, code)
+                            val ok = LocalAdbManager.pairDevice(host, port, code)
                             ui.post { result.success(ok) }
                         } catch (e: Exception) {
                             ui.post { result.error("PAIR_FAILED", e.message ?: "Ghép nối thất bại. Kiểm tra lại cổng và mã 6 số.", null) }
@@ -56,10 +58,11 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "connectLocalAdb" -> {
+                    val host = call.argument<String>("host")?.trim()?.ifEmpty { null }
                     val port = call.argument<Int>("port") ?: 0
                     io.execute {
                         try {
-                            val ok = LocalAdbManager.connectDevice(port)
+                            val ok = LocalAdbManager.connectDevice(host, port)
                             ui.post { result.success(ok) }
                         } catch (e: Exception) {
                             ui.post { result.error("CONNECT_FAILED", e.message ?: "Kết nối thất bại. Kiểm tra lại cổng kết nối.", null) }

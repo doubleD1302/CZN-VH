@@ -54,6 +54,7 @@ android {
 
 dependencies {
     implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("org.bouncycastle:bcprov-jdk15to18:1.81")
     implementation("org.conscrypt:conscrypt-android:2.5.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")

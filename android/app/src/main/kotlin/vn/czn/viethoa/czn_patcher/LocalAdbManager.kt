@@ -2,79 +2,101 @@ package vn.czn.viethoa.czn_patcher
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import io.github.muntashirakon.adb.AdbStream
+import org.bouncycastle.x509.X509V3CertificateGenerator
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
-import java.io.InputStreamReader
+import java.io.*
 import java.math.BigInteger
-import java.security.KeyPairGenerator
-import java.security.KeyStore
-import java.security.PrivateKey
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.security.*
 import java.security.cert.Certificate
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import java.security.spec.PKCS8EncodedKeySpec
+import java.util.*
 import java.util.concurrent.Executors
 import javax.security.auth.x500.X500Principal
 
 object LocalAdbManager : AbsAdbConnectionManager() {
-    private val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
     private val worker = Executors.newSingleThreadExecutor()
     private var prefs: SharedPreferences? = null
-    private const val KEY_ALIAS = "czn_local_adb_key"
+    private var privateKeyInstance: PrivateKey? = null
+    private var certificateInstance: Certificate? = null
+
     private const val PREF_PORT = "adb_debugging_port"
+    private const val PREF_HOST = "adb_debugging_host"
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("czn_local_adb", Context.MODE_PRIVATE)
-        val currentKeyVer = prefs?.getInt("key_version", 0) ?: 0
-        if (currentKeyVer < 2 || !keyStore.containsAlias(KEY_ALIAS)) {
-            try {
-                if (keyStore.containsAlias(KEY_ALIAS)) {
-                    keyStore.deleteEntry(KEY_ALIAS)
-                }
-            } catch (_: Exception) {}
+        loadOrGenerateKeys(context.filesDir)
 
-            val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore")
-            val spec = KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
-            )
-                .setDigests(
-                    KeyProperties.DIGEST_NONE,
-                    KeyProperties.DIGEST_SHA256,
-                    KeyProperties.DIGEST_SHA384,
-                    KeyProperties.DIGEST_SHA512
-                )
-                .setSignaturePaddings(
-                    KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,
-                    KeyProperties.SIGNATURE_PADDING_RSA_PSS
-                )
-                .setKeySize(2048)
-                .setCertificateSubject(X500Principal("CN=CZN_LocalADB"))
-                .setCertificateSerialNumber(BigInteger.ONE)
-                .build()
-            kpg.initialize(spec)
-            kpg.generateKeyPair()
-            prefs?.edit()?.putInt("key_version", 2)?.apply()
-        }
         val savedPort = prefs?.getInt(PREF_PORT, -1) ?: -1
+        val savedHost = prefs?.getString(PREF_HOST, null)
         if (savedPort > 0) {
             worker.execute {
                 try {
-                    connectDevice(savedPort)
+                    connectDevice(savedHost, savedPort)
                 } catch (_: Exception) {}
             }
         }
     }
 
+    private fun loadOrGenerateKeys(filesDir: File) {
+        val keysDir = File(filesDir, "adb_keys")
+        if (!keysDir.exists()) keysDir.mkdirs()
+        val privFile = File(keysDir, "czn_adb_private.key")
+        val certFile = File(keysDir, "czn_adb_cert.der")
+
+        if (privFile.exists() && certFile.exists()) {
+            try {
+                val privBytes = privFile.readBytes()
+                val kf = KeyFactory.getInstance("RSA")
+                val priv = kf.generatePrivate(PKCS8EncodedKeySpec(privBytes))
+                val cf = CertificateFactory.getInstance("X.509")
+                val cert = cf.generateCertificate(certFile.inputStream())
+                privateKeyInstance = priv
+                certificateInstance = cert
+                return
+            } catch (_: Exception) {
+                privFile.delete()
+                certFile.delete()
+            }
+        }
+
+        // Generate standard Software RSA 2048-bit keypair
+        val kpg = KeyPairGenerator.getInstance("RSA")
+        kpg.initialize(2048)
+        val kp = kpg.generateKeyPair()
+
+        // Generate X509 certificate using BouncyCastle
+        @Suppress("DEPRECATION")
+        val gen = X509V3CertificateGenerator()
+        val now = System.currentTimeMillis()
+        gen.setSerialNumber(BigInteger.valueOf(now))
+        val principal = X500Principal("CN=CZN_LocalADB")
+        gen.setIssuerDN(principal)
+        gen.setSubjectDN(principal)
+        gen.setNotBefore(Date(now - 86400000L))
+        gen.setNotAfter(Date(now + 86400000L * 365 * 10)) // 10 years
+        gen.setPublicKey(kp.public)
+        gen.setSignatureAlgorithm("SHA256WithRSAEncryption")
+        val cert: X509Certificate = gen.generate(kp.private)
+
+        privFile.writeBytes(kp.private.encoded)
+        certFile.writeBytes(cert.encoded)
+
+        privateKeyInstance = kp.private
+        certificateInstance = cert
+    }
+
     override fun getPrivateKey(): PrivateKey {
-        return keyStore.getKey(KEY_ALIAS, null) as PrivateKey
+        return privateKeyInstance ?: throw IllegalStateException("Chưa khởi tạo private key.")
     }
 
     override fun getCertificate(): Certificate {
-        return keyStore.getCertificate(KEY_ALIAS)
+        return certificateInstance ?: throw IllegalStateException("Chưa khởi tạo certificate.")
     }
 
     override fun getDeviceName(): String {
@@ -85,14 +107,14 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         return isConnected
     }
 
-    private fun getLocalWifiIp(): String? {
+    fun getLocalWifiIp(): String? {
         try {
-            val interfaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return null
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return null
             for (intf in interfaces) {
                 if (!intf.isUp || intf.isLoopback) continue
                 val addrs = intf.inetAddresses ?: continue
                 for (addr in addrs) {
-                    if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
+                    if (!addr.isLoopbackAddress && addr is Inet4Address) {
                         val host = addr.hostAddress
                         if (!host.isNullOrEmpty() && !host.startsWith("127.")) {
                             return host
@@ -104,51 +126,51 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         return null
     }
 
-    fun pairDevice(port: Int, code: String): Boolean {
-        var firstError: Exception? = null
-        try {
-            return pair("127.0.0.1", port, code)
-        } catch (e: Exception) {
-            firstError = e
+    fun pairDevice(host: String? = null, port: Int, code: String): Boolean {
+        val hostsToTry = mutableListOf<String>()
+        if (!host.isNullOrBlank()) {
+            hostsToTry.add(host.trim())
+        }
+        val wifiIp = getLocalWifiIp()
+        if (!wifiIp.isNullOrBlank() && !hostsToTry.contains(wifiIp)) {
+            hostsToTry.add(wifiIp)
+        }
+        if (!hostsToTry.contains("127.0.0.1")) {
+            hostsToTry.add("127.0.0.1")
         }
 
-        val wifiIp = getLocalWifiIp()
-        if (!wifiIp.isNullOrEmpty() && wifiIp != "127.0.0.1") {
+        for (targetHost in hostsToTry) {
             try {
-                return pair(wifiIp, port, code)
-            } catch (e: Exception) {
-                throw Exception("Ghép nối thất bại qua 127.0.0.1 (${firstError?.message}) và $wifiIp (${e.message})", e)
-            }
+                if (pair(targetHost, port, code)) {
+                    return true
+                }
+            } catch (_: Exception) {}
         }
-        throw firstError ?: Exception("Không thể ghép nối Local ADB.")
+        return false
     }
 
-    fun connectDevice(port: Int): Boolean {
-        var success = false
-        var firstError: Exception? = null
-        try {
-            success = connect("127.0.0.1", port)
-        } catch (e: Exception) {
-            firstError = e
+    fun connectDevice(host: String? = null, port: Int): Boolean {
+        val hostsToTry = mutableListOf<String>()
+        if (!host.isNullOrBlank()) {
+            hostsToTry.add(host.trim())
+        }
+        val wifiIp = getLocalWifiIp()
+        if (!wifiIp.isNullOrBlank() && !hostsToTry.contains(wifiIp)) {
+            hostsToTry.add(wifiIp)
+        }
+        if (!hostsToTry.contains("127.0.0.1")) {
+            hostsToTry.add("127.0.0.1")
         }
 
-        if (!success) {
-            val wifiIp = getLocalWifiIp()
-            if (!wifiIp.isNullOrEmpty() && wifiIp != "127.0.0.1") {
-                try {
-                    success = connect(wifiIp, port)
-                } catch (e: Exception) {
-                    throw Exception("Kết nối thất bại qua 127.0.0.1 (${firstError?.message}) và $wifiIp (${e.message})", e)
+        for (targetHost in hostsToTry) {
+            try {
+                if (connect(targetHost, port)) {
+                    prefs?.edit()?.putInt(PREF_PORT, port)?.putString(PREF_HOST, targetHost)?.apply()
+                    return true
                 }
-            }
+            } catch (_: Exception) {}
         }
-
-        if (success) {
-            prefs?.edit()?.putInt(PREF_PORT, port)?.apply()
-        } else if (firstError != null) {
-            throw firstError
-        }
-        return success
+        return false
     }
 
     fun pushFile(inputStream: InputStream, remotePath: String) {
