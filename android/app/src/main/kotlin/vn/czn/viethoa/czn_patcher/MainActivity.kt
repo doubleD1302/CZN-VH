@@ -52,8 +52,10 @@ class MainActivity : FlutterActivity() {
                         try {
                             val ok = LocalAdbManager.pairDevice(host, port, code)
                             ui.post { result.success(ok) }
-                        } catch (e: Exception) {
-                            ui.post { result.error("PAIR_FAILED", e.message ?: "Ghép nối thất bại. Kiểm tra lại cổng và mã 6 số.", null) }
+                        } catch (t: Throwable) {
+                            val msg = t.message ?: t.javaClass.simpleName
+                            android.util.Log.e("CZN_ADB", "pairLocalAdb error: $msg", t)
+                            ui.post { result.error("PAIR_FAILED", msg, null) }
                         }
                     }
                 }
@@ -64,8 +66,10 @@ class MainActivity : FlutterActivity() {
                         try {
                             val ok = LocalAdbManager.connectDevice(host, port)
                             ui.post { result.success(ok) }
-                        } catch (e: Exception) {
-                            ui.post { result.error("CONNECT_FAILED", e.message ?: "Kết nối thất bại. Kiểm tra lại cổng kết nối.", null) }
+                        } catch (t: Throwable) {
+                            val msg = t.message ?: t.javaClass.simpleName
+                            android.util.Log.e("CZN_ADB", "connectLocalAdb error: $msg", t)
+                            ui.post { result.error("CONNECT_FAILED", msg, null) }
                         }
                     }
                 }

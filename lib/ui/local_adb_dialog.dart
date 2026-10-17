@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../services/native_bridge.dart';
 
@@ -160,15 +161,23 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
           );
         }
 
-        final paired = await NativeBridge.pairLocalAdb(pairPort, code, host: host);
-        if (!paired) {
-          throw Exception('Ghép nối thất bại. Hãy kiểm tra lại Cổng ghép nối và Mã 6 số.');
+        try {
+          final paired = await NativeBridge.pairLocalAdb(pairPort, code, host: host);
+          if (!paired) {
+            throw Exception('PAIR_FAILED: Thiết bị không chấp nhận ghép nối.');
+          }
+        } on PlatformException catch (pe) {
+          throw Exception('PAIR_FAILED: ${pe.message ?? pe.code}');
         }
       }
 
-      final connected = await NativeBridge.connectLocalAdb(connPort, host: host);
-      if (!connected) {
-        throw Exception('Kết nối thất bại. Hãy kiểm tra lại Cổng kết nối ($connPort).');
+      try {
+        final connected = await NativeBridge.connectLocalAdb(connPort, host: host);
+        if (!connected) {
+          throw Exception('CONNECT_FAILED: Cổng kết nối ($connPort) không phản hồi.');
+        }
+      } on PlatformException catch (pe) {
+        throw Exception('CONNECT_FAILED: ${pe.message ?? pe.code}');
       }
 
       if (mounted) {

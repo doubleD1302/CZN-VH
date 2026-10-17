@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.github.muntashirakon.adb.AbsAdbConnectionManager
 import io.github.muntashirakon.adb.AdbStream
+import org.bouncycastle.jce.provider.BouncyCastleProvider
 import org.bouncycastle.x509.X509V3CertificateGenerator
 import org.json.JSONObject
 import java.io.*
@@ -21,6 +22,7 @@ import javax.security.auth.x500.X500Principal
 
 object LocalAdbManager : AbsAdbConnectionManager() {
     private val worker = Executors.newSingleThreadExecutor()
+    private var appContext: Context? = null
     private var prefs: SharedPreferences? = null
     private var privateKeyInstance: PrivateKey? = null
     private var certificateInstance: Certificate? = null
@@ -29,8 +31,13 @@ object LocalAdbManager : AbsAdbConnectionManager() {
     private const val PREF_HOST = "adb_debugging_host"
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         prefs = context.getSharedPreferences("czn_local_adb", Context.MODE_PRIVATE)
-        loadOrGenerateKeys(context.filesDir)
+        try {
+            loadOrGenerateKeys(context.filesDir)
+        } catch (e: Throwable) {
+            android.util.Log.e("CZN_ADB", "Khởi tạo khóa thất bại: ${e.message}", e)
+        }
 
         val savedPort = prefs?.getInt(PREF_PORT, -1) ?: -1
         val savedHost = prefs?.getString(PREF_HOST, null)
@@ -49,7 +56,15 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         val privFile = File(keysDir, "czn_adb_private.key")
         val certFile = File(keysDir, "czn_adb_cert.der")
 
-        if (privFile.exists() && certFile.exists()) {
+        try {
+            if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
+                Security.addProvider(BouncyCastleProvider())
+            }
+        } catch (e: Throwable) {
+            android.util.Log.w("CZN_ADB", "Không thể thêm BouncyCastleProvider: ${e.message}")
+        }
+
+        if (privFile.exists() && certFile.exists() && privFile.length() > 0 && certFile.length() > 0) {
             try {
                 val privBytes = privFile.readBytes()
                 val kf = KeyFactory.getInstance("RSA")
@@ -58,10 +73,12 @@ object LocalAdbManager : AbsAdbConnectionManager() {
                 val cert = cf.generateCertificate(certFile.inputStream())
                 privateKeyInstance = priv
                 certificateInstance = cert
+                android.util.Log.d("CZN_ADB", "Đã nạp cặp khóa ADB RSA 2048.")
                 return
-            } catch (_: Exception) {
-                privFile.delete()
-                certFile.delete()
+            } catch (e: Throwable) {
+                android.util.Log.w("CZN_ADB", "Khóa cũ hỏng (${e.message}), tạo lại mới...", e)
+                try { privFile.delete() } catch (_: Exception) {}
+                try { certFile.delete() } catch (_: Exception) {}
             }
         }
 
@@ -81,22 +98,35 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         gen.setNotBefore(Date(now - 86400000L))
         gen.setNotAfter(Date(now + 86400000L * 365 * 10)) // 10 years
         gen.setPublicKey(kp.public)
-        gen.setSignatureAlgorithm("SHA256WithRSAEncryption")
-        val cert: X509Certificate = gen.generate(kp.private)
+        gen.setSignatureAlgorithm("SHA256withRSA")
+        val cert: X509Certificate = try {
+            gen.generate(kp.private, "BC")
+        } catch (_: Throwable) {
+            gen.generate(kp.private)
+        }
 
-        privFile.writeBytes(kp.private.encoded)
-        certFile.writeBytes(cert.encoded)
+        try {
+            privFile.writeBytes(kp.private.encoded)
+            certFile.writeBytes(cert.encoded)
+        } catch (e: Throwable) {
+            android.util.Log.w("CZN_ADB", "Không thể lưu khóa ra file: ${e.message}")
+        }
 
         privateKeyInstance = kp.private
         certificateInstance = cert
+        android.util.Log.d("CZN_ADB", "Đã tạo mới cặp khóa ADB RSA 2048 thành công!")
     }
 
     override fun getPrivateKey(): PrivateKey {
-        return privateKeyInstance ?: throw IllegalStateException("Chưa khởi tạo private key.")
+        privateKeyInstance?.let { return it }
+        appContext?.let { loadOrGenerateKeys(it.filesDir) }
+        return privateKeyInstance ?: throw IllegalStateException("Chưa khởi tạo private key ADB.")
     }
 
     override fun getCertificate(): Certificate {
-        return certificateInstance ?: throw IllegalStateException("Chưa khởi tạo certificate.")
+        certificateInstance?.let { return it }
+        appContext?.let { loadOrGenerateKeys(it.filesDir) }
+        return certificateInstance ?: throw IllegalStateException("Chưa khởi tạo certificate ADB.")
     }
 
     override fun getDeviceName(): String {
@@ -127,6 +157,9 @@ object LocalAdbManager : AbsAdbConnectionManager() {
     }
 
     fun pairDevice(host: String? = null, port: Int, code: String): Boolean {
+        getPrivateKey()
+        getCertificate()
+
         val hostsToTry = mutableListOf<String>()
         if (!host.isNullOrBlank()) {
             hostsToTry.add(host.trim())
@@ -139,17 +172,33 @@ object LocalAdbManager : AbsAdbConnectionManager() {
             hostsToTry.add("127.0.0.1")
         }
 
+        var lastException: Throwable? = null
         for (targetHost in hostsToTry) {
             try {
+                android.util.Log.d("CZN_ADB", "Thử ghép nối ADB tới $targetHost:$port...")
                 if (pair(targetHost, port, code)) {
+                    android.util.Log.d("CZN_ADB", "Ghép nối ADB thành công với $targetHost:$port!")
                     return true
                 }
-            } catch (_: Exception) {}
+            } catch (t: Throwable) {
+                android.util.Log.w("CZN_ADB", "Ghép nối thất bại với $targetHost:$port: ${t.message}", t)
+                lastException = t
+            }
+        }
+        if (lastException != null) {
+            throw lastException
         }
         return false
     }
 
     fun connectDevice(host: String? = null, port: Int): Boolean {
+        getPrivateKey()
+        getCertificate()
+
+        if (isConnected) {
+            try { disconnect() } catch (_: Throwable) {}
+        }
+
         val hostsToTry = mutableListOf<String>()
         if (!host.isNullOrBlank()) {
             hostsToTry.add(host.trim())
@@ -162,13 +211,22 @@ object LocalAdbManager : AbsAdbConnectionManager() {
             hostsToTry.add("127.0.0.1")
         }
 
+        var lastException: Throwable? = null
         for (targetHost in hostsToTry) {
             try {
+                android.util.Log.d("CZN_ADB", "Thử kết nối ADB tới $targetHost:$port...")
                 if (connect(targetHost, port)) {
                     prefs?.edit()?.putInt(PREF_PORT, port)?.putString(PREF_HOST, targetHost)?.apply()
+                    android.util.Log.d("CZN_ADB", "Kết nối ADB thành công với $targetHost:$port!")
                     return true
                 }
-            } catch (_: Exception) {}
+            } catch (t: Throwable) {
+                android.util.Log.w("CZN_ADB", "Kết nối thất bại với $targetHost:$port: ${t.message}", t)
+                lastException = t
+            }
+        }
+        if (lastException != null) {
+            throw lastException
         }
         return false
     }
