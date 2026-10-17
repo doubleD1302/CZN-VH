@@ -25,8 +25,23 @@ def make_bundle(source,target,out,version,code,signer):
         for x,y in zip(old,new):
             if {k:v for k,v in x.items() if k!='text_ja'}!={k:v for k,v in y.items() if k!='text_ja'}:raise ValueError('Non-JP scene field changed')
             if x.get('text_ja')!=y.get('text_ja'):story_changes+=1
+    SUB_STORY='db/story_sub_part1new_260729@story.db'
+    slot_specs=[('text/ja/text.db','payload/text.zst','lang_ja_b01_0.ssrc'),(STORY,'payload/story.zst','base_b21_0.ssrc')]
+    if SUB_STORY in target.files and SUB_STORY in source.files:
+        original_sub=StoryTable(source.read_file(SUB_STORY));translated_sub=StoryTable(target.read_file(SUB_STORY))
+        if original_sub.order!=translated_sub.order or original_sub.columns!=translated_sub.columns:raise ValueError('Sub story metadata changed')
+        info_sub=original_sub.columns.index('info')
+        for scene in original_sub.order:
+            av=original_sub.values[scene];bv=translated_sub.values[scene]
+            if av[:info_sub]+av[info_sub+1:]!=bv[:info_sub]+bv[info_sub+1:]:raise ValueError('Non-info sub story field changed')
+            old=original_sub.scene(scene);new=translated_sub.scene(scene)
+            if len(old)!=len(new):raise ValueError('Sub story command count changed')
+            for x,y in zip(old,new):
+                if {k:v for k,v in x.items() if k!='text_ja'}!={k:v for k,v in y.items() if k!='text_ja'}:raise ValueError('Non-JP sub story scene field changed')
+                if x.get('text_ja')!=y.get('text_ja'):story_changes+=1
+        slot_specs.append((SUB_STORY,'payload/sub_story.zst','base_b17_0.ssrc'))
     patches=[];payloads={}
-    for name,payload_name,chunk_name in [('text/ja/text.db','payload/text.zst','lang_ja_b01_0.ssrc'),(STORY,'payload/story.zst','base_b21_0.ssrc')]:
+    for name,payload_name,chunk_name in slot_specs:
         f=source.files[name];g=target.files[name];segments=source.segments(f);next_segments=target.segments(g)
         if len(segments)!=1 or len(next_segments)!=1:raise ValueError('Unsupported split slot')
         c,off,size=segments[0];d,at,ns=next_segments[0]
