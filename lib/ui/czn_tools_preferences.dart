@@ -83,7 +83,9 @@ class CznToolsNoticePage extends StatelessWidget {
                                     ),
                                     child: Align(
                                       alignment: Alignment.centerLeft,
-                                      child: _NoticeBadge(active: notice != null),
+                                      child: _NoticeBadge(
+                                        active: notice != null,
+                                      ),
                                     ),
                                   ),
                                   Text(
@@ -108,8 +110,7 @@ class CznToolsNoticePage extends StatelessWidget {
                                   const CznToolsSeparator(),
                                   const SizedBox(height: 8),
                                   SelectableText(
-                                    notice?.body ??
-                                        'Bản tin cộng đồng mới sẽ xuất hiện tại đây khi có thông báo từ kênh cập nhật.',
+                                    notice?.body ?? 'Bản tin cộng đồng mới sẽ xuất hiện tại đây khi có thông báo từ kênh cập nhật.',
                                     style: _bodyStyle,
                                   ),
                                   const SizedBox(height: 4),
@@ -295,7 +296,10 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(false),
-                  child: const Text('Hủy', style: TextStyle(color: Color(0xFFA3B0C2))),
+                  child: const Text(
+                    'Hủy',
+                    style: TextStyle(color: Color(0xFFA3B0C2)),
+                  ),
                 ),
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(true),
@@ -324,7 +328,9 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Không thể điều khiển Chibi ngoài màn hình: $e')),
+          SnackBar(
+            content: Text('Không thể điều khiển Chibi ngoài màn hình: $e'),
+          ),
         );
       }
     }
@@ -347,9 +353,18 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
       final dynamic func = widget.onSave;
       bool saved;
       try {
-        saved = await (func as dynamic)(_companion, _auto, _channel.text.trim(), _overlay);
+        saved = await (func as dynamic)(
+          _companion,
+          _auto,
+          _channel.text.trim(),
+          _overlay,
+        );
       } catch (_) {
-        saved = await (func as dynamic)(_companion, _auto, _channel.text.trim());
+        saved = await (func as dynamic)(
+          _companion,
+          _auto,
+          _channel.text.trim(),
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -399,7 +414,9 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
                 title: 'Lớp phủ trên ứng dụng khác',
                 subtitle: 'Hiện nhân vật nổi khi mở game hoặc ứng dụng khác.',
                 value: _overlay,
-                onChanged: _blocked ? null : (v) => unawaited(_toggleOverlay(v)),
+                onChanged: _blocked
+                    ? null
+                    : (v) => unawaited(_toggleOverlay(v)),
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 9),
@@ -439,9 +456,7 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
                   color: Color(0xA3D3C0A7),
                 ),
               ),
-              const _InformationLine(
-                text: 'Android vẫn hỏi xác nhận cài APK.',
-              ),
+              const _InformationLine(text: 'Android vẫn hỏi xác nhận cài APK.'),
             ],
           ),
         ),
@@ -567,10 +582,7 @@ class _CznToolsSettingsPageState extends State<CznToolsSettingsPage> {
 }
 
 class _PreferencesScroll extends StatelessWidget {
-  const _PreferencesScroll({
-    required this.builder,
-    required this.topFraction,
-  });
+  const _PreferencesScroll({required this.builder, required this.topFraction});
 
   final WidgetBuilder builder;
   final double topFraction;
@@ -629,15 +641,9 @@ class _PreferenceSwitchRow extends StatelessWidget {
               ),
               const SizedBox(width: 13),
               Expanded(
-                child: _PreferenceDescription(
-                  title: title,
-                  subtitle: subtitle,
-                ),
+                child: _PreferenceDescription(title: title, subtitle: subtitle),
               ),
-              if (!stackSwitch) ...[
-                const SizedBox(width: 12),
-                control,
-              ],
+              if (!stackSwitch) ...[const SizedBox(width: 12), control],
             ],
           ),
           if (stackSwitch)
@@ -764,10 +770,7 @@ class _VersionLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      const SizedBox(
-        width: 26,
-        child: CznToolsSideLine(height: 14),
-      ),
+      const SizedBox(width: 26, child: CznToolsSideLine(height: 14)),
       const SizedBox(width: 9),
       Expanded(
         child: Text(

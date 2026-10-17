@@ -1,12 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'ui/home_screen.dart';
+import 'ui/windows_home.dart';
 import 'ui/czn_theme.dart';
 import 'ui/czn_wallpaper.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(
@@ -47,7 +50,19 @@ Future<void> main() async {
       'Noto Sans',
     ], await rootBundle.loadString('assets/fonts/Notosans_LICENSE.txt'));
   });
-  runApp(const CznPatcherApp());
+  final healthIndex = args.indexOf('--health-token');
+  final healthToken = healthIndex >= 0 && healthIndex + 1 < args.length
+      ? args[healthIndex + 1]
+      : null;
+  runApp(
+    Platform.isWindows
+        ? MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: windowsLauncherTheme,
+            home: WindowsHome(healthToken: healthToken),
+          )
+        : const CznPatcherApp(),
+  );
 }
 
 class CznPatcherApp extends StatelessWidget {

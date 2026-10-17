@@ -111,23 +111,24 @@ class CommunityGuideDialog extends StatelessWidget {
                     const SizedBox(height: 8),
                     _buildFaqItem(
                       question: 'Tại sao lại chọn tiếng Nhật để có tiếng Việt?',
-                      answer:
-                          'Game CZN chưa có nút chọn Tiếng Việt riêng. Bản patch thay thế an toàn vào gói ngôn ngữ tiếng Nhật để game nạp font chữ chuẩn và không bị lỗi vỡ chữ hay crash.',
+                      answer: 'Game CZN chưa có nút chọn Tiếng Việt riêng. Bản patch thay thế an toàn vào gói ngôn ngữ tiếng Nhật để game nạp font chữ chuẩn và không bị lỗi vỡ chữ hay crash.',
                     ),
                     _buildFaqItem(
                       question: 'Có bị khóa tài khoản (ban acc) không?',
-                      answer:
-                          'Hoàn toàn không. Bản dịch chỉ can thiệp vào các tệp dữ liệu văn bản hiển thị cục bộ, tuyệt đối không chỉnh sửa mã nguồn game, không sửa file .exe/.dll và không can thiệp gameplay.',
+                      answer: 'Hoàn toàn không. Bản dịch chỉ can thiệp vào các tệp dữ liệu văn bản hiển thị cục bộ, tuyệt đối không chỉnh sửa mã nguồn game, không sửa file .exe/.dll và không can thiệp gameplay.',
                     ),
                     _buildFaqItem(
-                      question: 'Game cập nhật qua STOVE xong bị mất tiếng Việt?',
-                      answer:
-                          'Khi STOVE cập nhật, nó sẽ tải lại tệp tiếng Nhật gốc của Smilegate. Lúc này bạn chỉ cần mở lại launcher này và bấm [ Cài tiếng Việt ] một lần nữa là xong ngay!',
+                      question:
+                          'Game cập nhật qua STOVE xong bị mất tiếng Việt?',
+                      answer: 'Khi STOVE cập nhật, nó sẽ tải lại tệp tiếng Nhật gốc của Smilegate. Lúc này bạn chỉ cần mở lại launcher này và bấm [ Cài tiếng Việt ] một lần nữa là xong ngay!',
                     ),
                     _buildFaqItem(
                       question: 'Khôi phục bản gốc như thế nào?',
-                      answer:
-                          'Vào mục Thiết lập -> Bấm [ Khôi phục bản gốc ]. Game sẽ quay trở về nguyên bản tiếng Nhật gốc 100% như lúc chưa cài.',
+                      answer: 'Vào mục Thiết lập -> Bấm [ Khôi phục bản gốc ]. Game sẽ quay trở về nguyên bản tiếng Nhật gốc 100% như lúc chưa cài.',
+                    ),
+                    _buildFaqItem(
+                      question: 'Lỗi "Kết nối chưa hoàn tất" / Shizuku treo (Xiaomi/POCO)?',
+                      answer: '1. Mở Shizuku bấm Dừng (Stop) rồi Khởi động lại (Start).\n2. Máy Xiaomi/HyperOS bắt buộc: Vào Cài đặt -> Tùy chọn nhà phát triển -> Bật "Gỡ lỗi USB (Cài đặt bảo mật)".\n3. Vào Thông tin ứng dụng Shizuku -> Tiết kiệm pin -> Chọn "Không hạn chế".',
                     ),
                   ],
                 ),
@@ -139,7 +140,10 @@ class CommunityGuideDialog extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFE8C170),
                     foregroundColor: const Color(0xFF1A1528),
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
@@ -183,7 +187,9 @@ class CommunityGuideDialog extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: highlight ? const Color(0xFFE8C170) : const Color(0xFF3B3356),
+              color: highlight
+                  ? const Color(0xFFE8C170)
+                  : const Color(0xFF3B3356),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -192,7 +198,9 @@ class CommunityGuideDialog extends StatelessWidget {
                 fontFamily: 'CznDisplay',
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: highlight ? const Color(0xFF1A1528) : const Color(0xFFFAF7EE),
+                color: highlight
+                    ? const Color(0xFF1A1528)
+                    : const Color(0xFFFAF7EE),
               ),
             ),
           ),
@@ -206,7 +214,9 @@ class CommunityGuideDialog extends StatelessWidget {
                     Icon(
                       icon,
                       size: 18,
-                      color: highlight ? const Color(0xFFE8C170) : const Color(0xFFFAF7EE),
+                      color: highlight
+                          ? const Color(0xFFE8C170)
+                          : const Color(0xFFFAF7EE),
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -215,7 +225,9 @@ class CommunityGuideDialog extends StatelessWidget {
                         fontFamily: 'CznDisplay',
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: highlight ? const Color(0xFFE8C170) : const Color(0xFFFAF7EE),
+                        color: highlight
+                            ? const Color(0xFFE8C170)
+                            : const Color(0xFFFAF7EE),
                       ),
                     ),
                   ],
@@ -253,7 +265,11 @@ class CommunityGuideDialog extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.help_outline, size: 16, color: Color(0xFFE8C170)),
+                const Icon(
+                  Icons.help_outline,
+                  size: 16,
+                  color: Color(0xFFE8C170),
+                ),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

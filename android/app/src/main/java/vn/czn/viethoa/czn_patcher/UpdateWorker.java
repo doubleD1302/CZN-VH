@@ -16,6 +16,7 @@ public class UpdateWorker extends Worker {
 
     @NonNull @Override public Result doWork() {
         Context c = getApplicationContext();
+        ReleaseClient.cleanup(c);
         SharedPreferences prefs = c.getSharedPreferences("czn_settings", 0);
         if (!prefs.getBoolean("auto_download", true)) return Result.success();
         boolean incomplete = false;

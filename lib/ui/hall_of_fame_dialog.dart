@@ -33,9 +33,7 @@ class _HallOfFameDialogState extends State<HallOfFameDialog> {
           color: Color(0xFFFFD700),
           shape: BoxShape.circle,
         ),
-        child: const Center(
-          child: Text('🥇', style: TextStyle(fontSize: 18)),
-        ),
+        child: const Center(child: Text('🥇', style: TextStyle(fontSize: 18))),
       );
     } else if (rank == 2) {
       return Container(
@@ -45,9 +43,7 @@ class _HallOfFameDialogState extends State<HallOfFameDialog> {
           color: Color(0xFFC0C0C0),
           shape: BoxShape.circle,
         ),
-        child: const Center(
-          child: Text('🥈', style: TextStyle(fontSize: 18)),
-        ),
+        child: const Center(child: Text('🥈', style: TextStyle(fontSize: 18))),
       );
     } else if (rank == 3) {
       return Container(
@@ -57,9 +53,7 @@ class _HallOfFameDialogState extends State<HallOfFameDialog> {
           color: Color(0xFFCD7F32),
           shape: BoxShape.circle,
         ),
-        child: const Center(
-          child: Text('🥉', style: TextStyle(fontSize: 18)),
-        ),
+        child: const Center(child: Text('🥉', style: TextStyle(fontSize: 18))),
       );
     } else {
       return Container(
@@ -210,16 +204,26 @@ class _HallOfFameDialogState extends State<HallOfFameDialog> {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFFE8F5E9),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF81C784), width: 0.8),
+                    border: Border.all(
+                      color: const Color(0xFF81C784),
+                      width: 0.8,
+                    ),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 12),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Color(0xFF2E7D32),
+                        size: 12,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Chỉ tính lỗi FIXED',
@@ -296,13 +300,12 @@ class _HallOfFameDialogState extends State<HallOfFameDialog> {
 
                   return ListView.separated(
                     itemCount: list.length,
-                    separatorBuilder: (context, index) => const Divider(
-                      height: 1,
-                      color: Color(0xFFEADBCE),
-                    ),
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, color: Color(0xFFEADBCE)),
                     itemBuilder: (context, index) {
                       final item = list[index];
-                      final sender = item['sender']?.toString() ?? 'Thuyền Trưởng';
+                      final sender =
+                          item['sender']?.toString() ?? 'Thuyền Trưởng';
                       final count = item['count']?.toString() ?? '1';
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),

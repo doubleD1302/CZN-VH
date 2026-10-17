@@ -5,7 +5,8 @@ import 'package:flutter/services.dart';
 class NativeBridge {
   static const channel = MethodChannel('vn.czn.viethoa/patcher');
   static const progress = EventChannel('vn.czn.viethoa/progress');
-  static Stream<dynamic> get progressEvents => progress.receiveBroadcastStream();
+  static Stream<dynamic> get progressEvents =>
+      progress.receiveBroadcastStream();
   static Future<Map<String, dynamic>> map(
     String method, [
     Map<String, dynamic>? args,
@@ -42,4 +43,26 @@ class NativeBridge {
 
   static Future<bool> isChibiOverlayRunning() async =>
       await channel.invokeMethod<bool>('isChibiOverlayRunning') ?? false;
+
+  static Future<bool> checkCompanionLaunchIntent() async =>
+      await channel.invokeMethod<bool>('checkCompanionLaunchIntent') ?? false;
+
+  static Future<bool> isLocalAdbConnected() async =>
+      await channel.invokeMethod<bool>('isLocalAdbConnected') ?? false;
+
+  static Future<bool> pairLocalAdb(int port, String code) async =>
+      await channel.invokeMethod<bool>('pairLocalAdb', {
+        'port': port,
+        'code': code,
+      }) ??
+      false;
+
+  static Future<bool> connectLocalAdb(int port) async =>
+      await channel.invokeMethod<bool>('connectLocalAdb', {
+        'port': port,
+      }) ??
+      false;
+
+  static Future<bool> openDevSettings() async =>
+      await channel.invokeMethod<bool>('openDevSettings') ?? false;
 }

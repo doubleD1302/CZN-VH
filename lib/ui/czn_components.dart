@@ -259,7 +259,7 @@ class CznStatusStrip extends StatelessWidget {
     child: Row(
       children: [
         for (final item in [
-          ('Shizuku', access),
+          ('Local ADB', access),
           ('Dữ liệu', ready),
           ('Bản dịch', installed),
         ])

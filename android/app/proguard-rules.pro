@@ -2,4 +2,10 @@
 -keep class androidx.work.impl.WorkDatabase_Impl { *; }
 -keep class vn.czn.viethoa.czn_patcher.UpdateWorker { *; }
 -keep class vn.czn.viethoa.czn_patcher.PatchUserService { *; }
+-keep class vn.czn.viethoa.czn_patcher.PatchCli { *; }
+-keep class io.github.muntashirakon.adb.** { *; }
+-keep class org.conscrypt.** { *; }
+-dontwarn com.android.org.conscrypt.SSLParametersImpl
+-dontwarn org.apache.harmony.xnet.provider.jsse.SSLParametersImpl
+-dontwarn org.conscrypt.**
 -keep class net.jpountz.** { *; }

@@ -279,7 +279,9 @@ class _ToolsNavigation extends StatelessWidget {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    key: tab == CznToolsTab.updates ? const Key('tools-update-tab') : null,
+                    key: tab == CznToolsTab.updates
+                        ? const Key('tools-update-tab')
+                        : null,
                     onTap: enabled ? () => onChanged(tab) : null,
                     borderRadius: BorderRadius.circular(30),
                     child: Padding(
