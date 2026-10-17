@@ -28,23 +28,42 @@ object LocalAdbManager : AbsAdbConnectionManager() {
 
     fun init(context: Context) {
         prefs = context.getSharedPreferences("czn_local_adb", Context.MODE_PRIVATE)
-        if (!keyStore.containsAlias(KEY_ALIAS)) {
+        val currentKeyVer = prefs?.getInt("key_version", 0) ?: 0
+        if (currentKeyVer < 2 || !keyStore.containsAlias(KEY_ALIAS)) {
+            try {
+                if (keyStore.containsAlias(KEY_ALIAS)) {
+                    keyStore.deleteEntry(KEY_ALIAS)
+                }
+            } catch (_: Exception) {}
+
             val kpg = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, "AndroidKeyStore")
-            val spec = KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY)
-                .setDigests(KeyProperties.DIGEST_SHA256, KeyProperties.DIGEST_SHA512)
-                .setSignaturePaddings(KeyProperties.SIGNATURE_PADDING_RSA_PKCS1)
+            val spec = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY
+            )
+                .setDigests(
+                    KeyProperties.DIGEST_NONE,
+                    KeyProperties.DIGEST_SHA256,
+                    KeyProperties.DIGEST_SHA384,
+                    KeyProperties.DIGEST_SHA512
+                )
+                .setSignaturePaddings(
+                    KeyProperties.SIGNATURE_PADDING_RSA_PKCS1,
+                    KeyProperties.SIGNATURE_PADDING_RSA_PSS
+                )
                 .setKeySize(2048)
                 .setCertificateSubject(X500Principal("CN=CZN_LocalADB"))
                 .setCertificateSerialNumber(BigInteger.ONE)
                 .build()
             kpg.initialize(spec)
             kpg.generateKeyPair()
+            prefs?.edit()?.putInt("key_version", 2)?.apply()
         }
         val savedPort = prefs?.getInt(PREF_PORT, -1) ?: -1
         if (savedPort > 0) {
             worker.execute {
                 try {
-                    connect("127.0.0.1", savedPort)
+                    connectDevice(savedPort)
                 } catch (_: Exception) {}
             }
         }
@@ -66,14 +85,68 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         return isConnected
     }
 
+    private fun getLocalWifiIp(): String? {
+        try {
+            val interfaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return null
+            for (intf in interfaces) {
+                if (!intf.isUp || intf.isLoopback) continue
+                val addrs = intf.inetAddresses ?: continue
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr is java.net.Inet4Address) {
+                        val host = addr.hostAddress
+                        if (!host.isNullOrEmpty() && !host.startsWith("127.")) {
+                            return host
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
     fun pairDevice(port: Int, code: String): Boolean {
-        return pair("127.0.0.1", port, code)
+        var firstError: Exception? = null
+        try {
+            return pair("127.0.0.1", port, code)
+        } catch (e: Exception) {
+            firstError = e
+        }
+
+        val wifiIp = getLocalWifiIp()
+        if (!wifiIp.isNullOrEmpty() && wifiIp != "127.0.0.1") {
+            try {
+                return pair(wifiIp, port, code)
+            } catch (e: Exception) {
+                throw Exception("Ghép nối thất bại qua 127.0.0.1 (${firstError?.message}) và $wifiIp (${e.message})", e)
+            }
+        }
+        throw firstError ?: Exception("Không thể ghép nối Local ADB.")
     }
 
     fun connectDevice(port: Int): Boolean {
-        val success = connect("127.0.0.1", port)
+        var success = false
+        var firstError: Exception? = null
+        try {
+            success = connect("127.0.0.1", port)
+        } catch (e: Exception) {
+            firstError = e
+        }
+
+        if (!success) {
+            val wifiIp = getLocalWifiIp()
+            if (!wifiIp.isNullOrEmpty() && wifiIp != "127.0.0.1") {
+                try {
+                    success = connect(wifiIp, port)
+                } catch (e: Exception) {
+                    throw Exception("Kết nối thất bại qua 127.0.0.1 (${firstError?.message}) và $wifiIp (${e.message})", e)
+                }
+            }
+        }
+
         if (success) {
             prefs?.edit()?.putInt(PREF_PORT, port)?.apply()
+        } else if (firstError != null) {
+            throw firstError
         }
         return success
     }

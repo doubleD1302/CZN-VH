@@ -90,8 +90,9 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
             '💡 Vui lòng kiểm tra kết nối Wi-Fi, mở lại hộp thoại "Ghép nối bằng mã ghép nối" trong Cài đặt và thử lại.';
       }
       return '❌ GHÉP NỐI THẤT BẠI\n\n'
-          '🔍 Mã ghép nối không đúng hoặc đã hết hạn.\n'
-          '💡 Vui lòng mở lại hộp thoại "Ghép nối bằng mã ghép nối" để lấy mã 6 số và cổng ghép nối mới nhất.';
+          '🔍 Mã ghép nối không đúng, hết hạn, hoặc bị từ chối kết nối.\n'
+          '💡 Vui lòng mở lại hộp thoại "Ghép nối bằng mã ghép nối" để lấy mã 6 số và cổng ghép nối mới nhất.\n\n'
+          '⚠️ Chi tiết lỗi hệ thống:\n$raw';
     }
 
     // Check if error is from connection
