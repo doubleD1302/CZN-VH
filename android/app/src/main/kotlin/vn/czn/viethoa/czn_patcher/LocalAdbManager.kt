@@ -244,6 +244,11 @@ object LocalAdbManager : AbsAdbConnectionManager() {
                 out.write(buf, 0, n)
             }
             out.flush()
+        } catch (e: IOException) {
+            if (e.message?.contains("Stream closed", ignoreCase = true) != true &&
+                e.message?.contains("closed", ignoreCase = true) != true) {
+                throw e
+            }
         } finally {
             try { out.close() } catch (_: Exception) {}
             try { stream.close() } catch (_: Exception) {}
@@ -258,9 +263,23 @@ object LocalAdbManager : AbsAdbConnectionManager() {
         try {
             val buf = ByteArray(4096)
             while (!stream.isClosed) {
-                val n = stream.read(buf, 0, buf.size)
+                val n = try {
+                    stream.read(buf, 0, buf.size)
+                } catch (e: IOException) {
+                    if (e.message?.contains("Stream closed", ignoreCase = true) == true ||
+                        e.message?.contains("closed", ignoreCase = true) == true) {
+                        -1
+                    } else {
+                        throw e
+                    }
+                }
                 if (n < 0) break
                 stdout.write(buf, 0, n)
+            }
+        } catch (e: IOException) {
+            if (e.message?.contains("Stream closed", ignoreCase = true) != true &&
+                e.message?.contains("closed", ignoreCase = true) != true) {
+                throw e
             }
         } finally {
             try { stream.close() } catch (_: Exception) {}
@@ -275,14 +294,27 @@ object LocalAdbManager : AbsAdbConnectionManager() {
     ): JSONObject {
         check(isConnected) { "Chưa kết nối Local ADB. Hãy kết nối qua Gỡ lỗi không dây." }
         val apkPath = context.applicationInfo.sourceDir
-        val cmd = "CLASSPATH=\"$apkPath\" app_process /system/bin vn.czn.viethoa.czn_patcher.PatchCli ${args.joinToString(" ") { "\"$it\"" }}"
+        val cmd = "export CLASSPATH=\"$apkPath\"; exec app_process /system/bin vn.czn.viethoa.czn_patcher.PatchCli ${args.joinToString(" ") { "\"$it\"" }} 2>&1"
         val stream: AdbStream = openStream("shell:$cmd")
         val streamIn = stream.openInputStream()
         val reader = BufferedReader(InputStreamReader(streamIn, Charsets.UTF_8))
         var jsonLine: String? = null
+        val allOutput = StringBuilder()
         try {
             while (true) {
-                val line = reader.readLine() ?: break
+                val line = try {
+                    reader.readLine()
+                } catch (e: IOException) {
+                    if (e.message?.contains("Stream closed", ignoreCase = true) == true ||
+                        e.message?.contains("closed", ignoreCase = true) == true) {
+                        null
+                    } else {
+                        throw e
+                    }
+                } ?: break
+
+                allOutput.append(line).append("\n")
+
                 if (line.startsWith("PROGRESS:")) {
                     val parts = line.split(":", limit = 3)
                     if (parts.size >= 3) {
@@ -294,12 +326,21 @@ object LocalAdbManager : AbsAdbConnectionManager() {
                     jsonLine = line.trim()
                 }
             }
+        } catch (e: IOException) {
+            if (e.message?.contains("Stream closed", ignoreCase = true) != true &&
+                e.message?.contains("closed", ignoreCase = true) != true) {
+                throw e
+            }
         } finally {
             try { stream.close() } catch (_: Exception) {}
         }
         if (jsonLine != null) {
             return JSONObject(jsonLine)
         }
-        throw IllegalStateException("Lệnh PatchCli không trả về kết quả JSON hợp lệ.")
+        val outText = allOutput.toString().trim()
+        throw IllegalStateException(
+            if (outText.isNotBlank()) "Lệnh PatchCli kết thúc nhưng không có kết quả JSON. Đầu ra:\n$outText"
+            else "Lệnh PatchCli không trả về dữ liệu nào từ tiến trình Local ADB."
+        )
     }
 }
