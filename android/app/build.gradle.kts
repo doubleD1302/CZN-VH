@@ -50,6 +50,10 @@ android {
             signingConfig = signingConfigs.findByName("community")
         }
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
