@@ -616,9 +616,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() => _downloading = false);
           return await NativeBridge.map('installPatch', {'path': path});
         } catch (e) {
-          if (_isPc) {
-            setState(() => _downloading = false);
-            return NativeBridge.map('installBundled');
+          setState(() => _downloading = false);
+          if (_bundled != null) {
+            return await NativeBridge.map('installBundled');
           }
           rethrow;
         }
