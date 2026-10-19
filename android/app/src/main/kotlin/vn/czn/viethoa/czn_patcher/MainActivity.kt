@@ -251,7 +251,7 @@ class MainActivity : FlutterActivity() {
                                             val zip = File(call.argument<String>("path") ?: "")
                                             UpdateCache.acquire(zip).use {
                                                 consumeDownload(zip)
-                                                require(zip.isFile && zip.length() <= 33554432L) { "Gói bản dịch không hợp lệ hoặc vượt 32 MB." }
+                                                require(zip.isFile && zip.length() <= 67108864L) { "Gói bản dịch không hợp lệ hoặc vượt 64 MB." }
                                                 zip.inputStream().use { runPatchOperation("install", pkg, it) }
                                             }
                                         }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../services/native_bridge.dart';
 import '../services/notice_policy.dart';
@@ -109,8 +110,8 @@ class CznToolsNoticePage extends StatelessWidget {
                                   const SizedBox(height: 8),
                                   const CznToolsSeparator(),
                                   const SizedBox(height: 8),
-                                  SelectableText(
-                                    notice?.body ?? 'Bản tin cộng đồng mới sẽ xuất hiện tại đây khi có thông báo từ kênh cập nhật.',
+                                  _NoticeBodyText(
+                                    text: notice?.body ?? 'Bản tin cộng đồng mới sẽ xuất hiện tại đây khi có thông báo từ kênh cập nhật.',
                                     style: _bodyStyle,
                                   ),
                                   const SizedBox(height: 4),
@@ -787,3 +788,77 @@ class _VersionLine extends StatelessWidget {
     ],
   );
 }
+
+class _NoticeBodyText extends StatelessWidget {
+  const _NoticeBodyText({required this.text, required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final regex = RegExp(
+      r'\[([^\]]+)\]\((https?://[^\s\)]+)\)|(?:(bấm vào đây|vào đây)\s*\((https?://[^\s\)]+)\))|(https?://[^\s\)]+)',
+      caseSensitive: false,
+    );
+    final spans = <InlineSpan>[];
+    int lastIndex = 0;
+
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastIndex) {
+        spans.add(TextSpan(text: text.substring(lastIndex, match.start)));
+      }
+
+      String label;
+      String url;
+
+      if (match.group(1) != null && match.group(2) != null) {
+        label = match.group(1)!;
+        url = match.group(2)!;
+      } else if (match.group(3) != null && match.group(4) != null) {
+        label = match.group(3)!;
+        url = match.group(4)!;
+      } else {
+        label = match.group(5)!;
+        url = match.group(5)!;
+      }
+
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              onTap: () {
+                final uri = Uri.tryParse(url);
+                if (uri != null) {
+                  launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              },
+              child: Text(
+                label,
+                style: style.copyWith(
+                  color: const Color(0xFF58A6FF),
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: const Color(0xFF58A6FF),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < text.length) {
+      spans.add(TextSpan(text: text.substring(lastIndex)));
+    }
+
+    return Text.rich(
+      TextSpan(children: spans, style: style),
+    );
+  }
+}
+

@@ -639,8 +639,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (picked.isEmpty || picked.first.path == null || !mounted) return;
     await _run(() async {
       final source = File(picked.first.path!);
-      if (await source.length() > 33554432) {
-        throw Exception('Gói vượt 32 MB. Gói cũ 210 MB không còn được hỗ trợ.');
+      if (await source.length() > 67108864) {
+        throw Exception('Gói vượt 64 MB. Gói cũ 210 MB không còn được hỗ trợ.');
       }
       final cache = await getApplicationSupportDirectory();
       final temp = File('${cache.path}/local.cznpatch');

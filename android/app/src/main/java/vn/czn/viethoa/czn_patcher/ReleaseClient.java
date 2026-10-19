@@ -58,7 +58,7 @@ public final class ReleaseClient {
         HttpURLConnection c=open(url);String envelope;
         try(InputStream in=c.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>262144)throw new IOException("Metadata quá lớn.");out.write(b,0,n);}envelope=out.toString("UTF-8");}finally{c.disconnect();}
         JSONObject channel=verify(envelope);if(channel.getInt("schema")!=1||!channel.getString("type").equals("channel"))throw new IOException("Kênh cập nhật sai định dạng.");int code=channel.getInt("patch_code");int seen=ctx.getSharedPreferences("czn_settings",0).getInt("highest_patch_code",10400);if(code<seen)throw new IOException("Máy chủ trả bản cập nhật cũ; đã từ chối hạ phiên bản.");
-        if(channel.getLong("patch_size")<=0||channel.getLong("patch_size")>33554432L||!channel.getString("patch_sha256").matches("[a-f0-9]{64}"))throw new IOException("Thông tin gói không hợp lệ.");
+        if(channel.getLong("patch_size")<=0||channel.getLong("patch_size")>67108864L||!channel.getString("patch_sha256").matches("[a-f0-9]{64}"))throw new IOException("Thông tin gói không hợp lệ.");
         if(channel.has("app_code")){UpdatePolicy.validateAppMetadata(channel);if(channel.getInt("app_code")<ctx.getSharedPreferences("czn_settings",0).getInt("highest_app_code",0))throw new IOException("Máy chủ trả bản ứng dụng cũ; đã từ chối hạ phiên bản.");}
         PatchFormat.write(new File(ctx.getFilesDir(),"channel.json"),envelope.getBytes(StandardCharsets.UTF_8));ctx.getSharedPreferences("czn_settings",0).edit().putInt("highest_patch_code",code).putInt("highest_app_code",channel.optInt("app_code",0)).apply();cleanup(ctx);return channel;
     }
@@ -69,7 +69,7 @@ public final class ReleaseClient {
         if(data.has("app_code")){UpdatePolicy.validateAppMetadata(data);if(data.getInt("app_code")<ctx.getSharedPreferences("czn_settings",0).getInt("highest_app_code",0))return new JSONObject();}return data;
     }
     public static File download(Context ctx,JSONObject channel,boolean apk,AtomicBoolean cancelled,PatchEngine.Progress progress)throws Exception{
-        String kind=apk?"app":"patch",hash=channel.getString(kind+"_sha256"),url=channel.getString(kind+"_url");long size=channel.getLong(kind+"_size"),max=apk?157286400L:33554432L;
+        String kind=apk?"app":"patch",hash=channel.getString(kind+"_sha256"),url=channel.getString(kind+"_url");long size=channel.getLong(kind+"_size"),max=apk?157286400L:67108864L;
         if(!hash.matches("[a-f0-9]{64}")||size<=0||size>max)throw new IOException("Kích thước/checksum cập nhật không hợp lệ.");
         File dir=UpdateCache.directory(ctx.getFilesDir()),result=new File(dir,hash+(apk?".apk":".cznpatch"));
         File partial=new File(dir,hash+".part-"+UUID.randomUUID());
