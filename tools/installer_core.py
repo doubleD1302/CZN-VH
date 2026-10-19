@@ -10,9 +10,9 @@ import subprocess
 import time
 import uuid
 
-from czn_format import Archive, Database, FormatError, validate_translation, xxhash
+from czn_format import Archive, Database, FormatError, MissingChunkError, validate_translation, xxhash
 
-VERSION = '1.3.5'
+VERSION = '1.3.6'
 IDENTITY_FILES = ('manifest.ssra.etag', 'manifest.ssra.prev')
 LEGACY_MANIFESTS = {
     '45a0093589720c98ac0e9b91bd711f26ce34b74d0d5db4fe21f21aa141edce15',
@@ -95,7 +95,12 @@ def contained(root, relative):
 
 def allowed_resource(relative):
     p = Path(relative)
-    return relative in ('manifest.ssra', *IDENTITY_FILES, 'chunks/base_b21_0.ssrc') or (
+    return relative in (
+        'manifest.ssra', *IDENTITY_FILES,
+        'chunks/base_b21_0.ssrc', 'chunks/base_b17_0.ssrc', 'chunks/base_b22_0.ssrc',
+        'chunks/base_b29_0.ssrc', 'chunks/base_b30_0.ssrc',
+        'chunks/base_b31_0.ssrc', 'chunks/base_b32_0.ssrc', 'chunks/base_b01_0.ssrc'
+    ) or (
         len(p.parts) == 2 and p.parts[0] == 'chunks' and p.name.startswith('lang_ja_') and p.suffix == '.ssrc'
     )
 
@@ -121,12 +126,7 @@ def require_game_closed():
     if 'ucldr_chaoszeronightmare' in text:
         raise RuntimeError('Game đang chạy. Hãy thoát game rồi thực hiện lại.')
     if 'ssr-stove-shield.exe' in text:
-        # Game chính đã đóng, nhưng tiến trình shield anti-cheat của Stove còn sót lại hoặc bị treo sau khi thoát game.
-        try:
-            subprocess.run(['taskkill', '/F', '/IM', 'ssr-stove-shield.exe'],
-                           capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        except Exception:
-            pass
+        raise RuntimeError('Tiến trình game/STOVE chưa đóng hoàn toàn. Hãy thoát game và STOVE rồi thực hiện lại.')
 
 
 
@@ -310,7 +310,7 @@ class Installer:
         if 'text/en/text.db' in ar.files:
             try:
                 en = Database(ar.read_file('text/en/text.db')).texts
-            except (FormatError, FileNotFoundError):
+            except (FormatError, FileNotFoundError, MissingChunkError):
                 self.log('Không có bản tiếng Anh hợp lệ để đối chiếu; tiếp tục với nguồn Nhật.')
         for key in db.order:
             ja = db.texts[key]
@@ -369,7 +369,14 @@ class Installer:
         build = self.data / 'builds' / (report['manifest_sha256'][:16] + '-' + uuid.uuid4().hex[:8])
         self.log('Đang dựng gói ngôn ngữ và kiểm tra đọc lại...')
         stats = ar.patch_text(accepted, build)
-        from story_localization import build_story, STORY_FILE
+        from story_localization import (
+            build_story, STORY_FILE,
+            build_sub_story, SUB_STORY_FILE,
+            build_messenger_story, MESSENGER_STORY_FILE,
+            build_visit_story, VISIT_STORY_FILE,
+            build_friendship_story, FRIENDSHIP_STORY_FILE,
+            build_counseling_story, COUNSELING_STORY_FILE
+        )
         story_payload, story_report = build_story(ar, self.home)
         report['story'] = story_report
         if story_payload is not None:
@@ -377,7 +384,52 @@ class Installer:
             combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
             story_report['archive_patch'] = combined.patch_story_file(STORY_FILE, story_payload, build)
             stats['chunks'] = sorted({*stats['chunks'], *story_report['archive_patch']['chunks']})
-            self.log(f'Cốt truyện: {story_report["translated"]}/{story_report["total"]} mục; chỉ đổi trường text_ja.')
+            self.log(f'Cốt truyện chính: {story_report["translated"]}/{story_report["total"]} mục; chỉ đổi trường text_ja.')
+
+        sub_story_payload, sub_story_report = build_sub_story(ar, self.home)
+        report['sub_story'] = sub_story_report
+        if sub_story_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            sub_story_report['archive_patch'] = combined.patch_story_file(SUB_STORY_FILE, sub_story_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *sub_story_report['archive_patch']['chunks']})
+            self.log(f'Cốt truyện phụ: {sub_story_report["translated"]}/{sub_story_report["total"]} mục; chỉ đổi trường text_ja.')
+
+        messenger_payload, messenger_report = build_messenger_story(ar, self.home)
+        report['messenger_story'] = messenger_report
+        if messenger_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            messenger_report['archive_patch'] = combined.patch_story_file(MESSENGER_STORY_FILE, messenger_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *messenger_report['archive_patch']['chunks']})
+            self.log(f'Tin nhắn Messenger: {messenger_report["translated"]}/{messenger_report["total"]} mục; chỉ đổi trường text_ja.')
+
+        visit_payload, visit_report = build_visit_story(ar, self.home)
+        report['visit_story'] = visit_report
+        if visit_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            visit_report['archive_patch'] = combined.patch_story_file(VISIT_STORY_FILE, visit_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *visit_report['archive_patch']['chunks']})
+            self.log(f'Thăm thị trấn: {visit_report["translated"]}/{visit_report["total"]} mục; chỉ đổi trường text_ja.')
+
+        friendship_payload, friendship_report = build_friendship_story(ar, self.home)
+        report['friendship_story'] = friendship_report
+        if friendship_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            friendship_report['archive_patch'] = combined.patch_story_file(FRIENDSHIP_STORY_FILE, friendship_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *friendship_report['archive_patch']['chunks']})
+            self.log(f'Giao lưu & Tình bạn: {friendship_report["translated"]}/{friendship_report["total"]} mục; chỉ đổi trường text_ja.')
+
+        counseling_payload, counseling_report = build_counseling_story(ar, self.home)
+        report['counseling_story'] = counseling_report
+        if counseling_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            counseling_report['archive_patch'] = combined.patch_story_file(COUNSELING_STORY_FILE, counseling_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *counseling_report['archive_patch']['chunks']})
+            self.log(f'Tư vấn tâm lý: {counseling_report["translated"]}/{counseling_report["total"]} mục; chỉ đổi trường text_ja.')
         for rel in IDENTITY_FILES:
             source = self.resources / rel
             if not source.exists():
@@ -395,7 +447,44 @@ class Installer:
         self.log('Bản vá đã vượt qua kiểm tra checksum, giải nén, ID và nội dung.')
         return ar, build, report
 
-    def _transaction(self, files, new_state):
+    def _retired_chunk_restores(self, ar, files):
+        """Restore old managed chunks omitted by a corrected physical mapping.
+
+        In 2.1.16, CNAM could map logical ID 32 to physical base_b31 while
+        the installer wrote base_b32. Reinstall must restore that displaced
+        file as well as write the newly built canonical chunk, in one journal.
+        """
+        if not self.state.get('installed'):
+            return {}
+        retired = [rel for rel in self.state.get('patched_hashes', {})
+                   if rel.startswith('chunks/') and rel not in files]
+        if not retired:
+            return {}
+        if (sha(self.resources / 'manifest.ssra') != self.state['patched_hashes'].get('manifest.ssra')
+                or hashlib.sha256(ar.data).hexdigest() != self.state['original_hashes'].get('manifest.ssra')):
+            raise RuntimeError('Game đã đổi phiên bản; không tự khôi phục chunk cũ. Hãy kiểm tra tệp bằng STOVE.')
+        backup = self._backup_dir()
+        chunks = {c['name']: c for c in ar.chunks}
+        restored = {}
+        for rel in retired:
+            if not allowed_resource(rel):
+                raise ValueError('Chunk cũ nằm ngoài phạm vi khôi phục.')
+            source = contained(backup, rel)
+            target = contained(self.resources, rel)
+            if (not source.is_file() or not target.is_file()
+                    or sha(source) != self.state['original_hashes'].get(rel)
+                    or sha(target) != self.state['patched_hashes'][rel]):
+                raise RuntimeError('Chunk cũ hoặc bản sao lưu đã thay đổi; chưa ghi dữ liệu game: ' + rel)
+            name = Path(rel).name
+            if name not in chunks:
+                raise FormatError('Không xác định được tên chunk gốc để khôi phục: ' + name)
+            # Verify original physical identity, not just a matching file size.
+            check = Archive(ar.root, ar.manifest_path, {name: source})
+            check.chunk_bytes(chunks[name])
+            restored[rel] = source
+        return restored
+
+    def _transaction(self, files, new_state, expected_previous=None, expected_sources=None):
         require_game_closed()
         check_write_access(contained(self.resources, rel) for rel in files if allowed_resource(rel))
         txn = self.data / 'transactions' / uuid.uuid4().hex
@@ -408,6 +497,10 @@ class Installer:
             old.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target, old)
             previous[rel], upcoming[rel] = sha(old), sha(source)
+            if expected_previous is not None and previous[rel] != expected_previous.get(rel):
+                raise RuntimeError('Dữ liệu game đã đổi trước giao dịch; chưa ghi bản vá.')
+            if expected_sources is not None and upcoming[rel] != expected_sources.get(rel):
+                raise RuntimeError('Gói cài hoặc bản sao lưu đã đổi trước giao dịch; chưa ghi bản vá.')
         journal = {'game_dir': str(self.game), 'transaction': str(txn.relative_to(self.data)),
                    'previous_state': self.state, 'previous_hashes': previous, 'next_hashes': upcoming}
         write_json(self.journal_file, journal)
@@ -416,6 +509,8 @@ class Installer:
                 target = contained(self.resources, rel)
                 if sha(target) != previous[rel]:
                     raise RuntimeError('Game thay đổi trong lúc cài; hãy chờ STOVE cập nhật xong.')
+                if sha(source) != upcoming[rel]:
+                    raise RuntimeError('Nguồn giao dịch đã thay đổi; chưa ghi tệp này.')
                 atomic_bytes(target, Path(source).read_bytes())
                 if sha(target) != upcoming[rel]:
                     raise RuntimeError('Kiểm tra file sau ghi thất bại.')
@@ -434,6 +529,9 @@ class Installer:
         # Write language chunks before the manifest. Interrupted installs are journaled.
         files['manifest.ssra'] = build / 'manifest.ssra'
         files.update({rel: build / rel for rel in IDENTITY_FILES if (build / rel).exists()})
+        retired = self._retired_chunk_restores(ar, files)
+        files.update(retired)
+        report['restored_previous_chunks'] = sorted(retired)
         fingerprint = hashlib.sha256(ar.data).hexdigest()
         backup = self.data / 'backups' / fingerprint
         originals = {}
@@ -458,15 +556,27 @@ class Installer:
             raise RuntimeError('Game vừa cập nhật trong lúc dựng gói. Bấm đồng bộ lại sau khi cập nhật hoàn tất.')
         for chunk, _, _ in ar.segments(ar.files['text/ja/text.db']):
             check_ar.chunk_bytes(next(c for c in check_ar.chunks if c['name'] == chunk['name']))
+        expected_sources = {rel: sha(p) for rel, p in files.items()}
         state = {'schema': 1, 'installed': True, 'game_dir': str(self.game),
-                 'backup': str(backup.relative_to(self.data)), 'original_hashes': originals,
-                 'patched_hashes': {rel: sha(p) for rel, p in files.items()}, 'report': report}
-        self._transaction(files, state)
+                 'backup': str(backup.relative_to(self.data)),
+                 'original_hashes': {rel: d for rel, d in originals.items() if rel not in retired},
+                 'patched_hashes': {rel: h for rel, h in expected_sources.items() if rel not in retired},
+                 'report': report}
+        expected_previous = {rel: sha(contained(self.resources, rel)) for rel in files}
+        # Recheck provenance after the build/backup work, immediately before
+        # preparing the transaction. Journal previous bytes always come from
+        # the live files, including a displaced legacy chunk.
+        if self._retired_chunk_restores(ar, {rel: p for rel, p in files.items() if rel not in retired}) != retired:
+            raise RuntimeError('Danh sách chunk cần khôi phục đã thay đổi.')
+        self._transaction(files, state, expected_previous, expected_sources)
         # Check the installed archive independently, using only the game's current files.
         installed = Archive(self.resources)
         native = Database(installed.read_file('text/ja/text.db'), require_native_phase=True)
         if native.rows != report['rows']:
             raise RuntimeError('Số dòng sau cài không khớp.')
+        for chunk in installed.chunks:
+            if 'chunks/' + chunk['name'] in files:
+                installed.chunk_bytes(chunk)
         if report.get('story', {}).get('translated'):
             from story_format import StoryTable
             from story_localization import STORY_FILE, source_rows
@@ -477,12 +587,128 @@ class Installer:
             if count != report['story']['translated']:
                 raise RuntimeError('Story readback sau cài không khớp.')
             report['story']['installed_readback_match'] = count
+        if report.get('sub_story', {}).get('translated'):
+            from story_format import StoryTable
+            from story_localization import SUB_STORY_FILE, source_rows, SUB_CHAPTER_PREFIXES
+            live_sub = source_rows(StoryTable(installed.read_file(SUB_STORY_FILE)), SUB_CHAPTER_PREFIXES)
+            entries = read_json(self.data / 'story_sub_translations.json')['entries']
+            applied_ids = set(report['sub_story']['accepted_ids'])
+            count = sum(r['id'] in applied_ids and live_sub.get(r['id'], {}).get('source_ja') == r['text_vi'] for r in entries)
+            if count != report['sub_story']['translated']:
+                raise RuntimeError('Sub Story readback sau cài không khớp.')
+            report['sub_story']['installed_readback_match'] = count
         self.log(f'Đã cài {report["translated"]:,} mục tiếng Việt. Chọn ngôn ngữ văn bản 日本語 trong game.')
         if report['identity_synced']:
             self.log('Đã đồng bộ dấu nhận diện manifest với bản vá; giữ nguyên URL và ETag của phiên bản trên máy chủ.')
         report['file_status'] = self.status()
         write_json(self.data / 'reports' / 'TRANG_THAI.json', report)
         return report
+
+    def install_patch(self, patch_path):
+        require_game_closed()
+        patch_file = Path(patch_path).resolve()
+        if not patch_file.is_file():
+            raise FileNotFoundError(f"Không tìm thấy file cập nhật: {patch_file}")
+
+        self.log(f'Đang mở gói cập nhật từ GitHub: {patch_file.name}...')
+        import zipfile
+        import zstandard as zstd
+
+        with zipfile.ZipFile(patch_file, 'r') as z:
+            dctx = zstd.ZstdDecompressor()
+            if 'payload/text.zst' not in z.namelist():
+                raise ValueError('Gói cập nhật thiếu payload/text.zst')
+            decompressed_text = dctx.decompress(z.read('payload/text.zst'))
+            patch_db = Database(decompressed_text)
+            self.log(f'Đọc được {patch_db.rows:,} mục văn bản từ gói cập nhật.')
+
+            story_payload = None
+            if 'payload/story.zst' in z.namelist():
+                story_payload = dctx.decompress(z.read('payload/story.zst'))
+                self.log('Đã nạp dữ liệu cốt truyện từ gói cập nhật.')
+
+            sub_story_payload = None
+            if 'payload/sub_story.zst' in z.namelist():
+                sub_story_payload = dctx.decompress(z.read('payload/sub_story.zst'))
+                self.log('Đã nạp dữ liệu cốt truyện phụ từ gói cập nhật.')
+
+        ar, db = self.original_archive()
+        accepted = {}
+        for k, v in patch_db.texts.items():
+            if k in db.texts and v != db.texts[k]:
+                accepted[k] = v
+
+        if not accepted:
+            raise ValueError('Không tìm thấy nội dung tiếng Việt mới cần áp dụng.')
+
+        self.log(f'Áp dụng {len(accepted):,} mục bản dịch tiếng Việt vào game...')
+        fingerprint = hashlib.sha256(ar.data).hexdigest()
+        build = self.data / 'builds' / (fingerprint[:16] + '-' + uuid.uuid4().hex[:8])
+        stats = ar.patch_text(accepted, build)
+
+        from story_localization import STORY_FILE, SUB_STORY_FILE
+        if story_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            stats['story_archive_patch'] = combined.patch_story_file(STORY_FILE, story_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *stats['story_archive_patch']['chunks']})
+            self.log('Đã gắn dữ liệu cốt truyện vào chunk game.')
+
+        if sub_story_payload is not None:
+            overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
+            combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
+            stats['sub_story_archive_patch'] = combined.patch_story_file(SUB_STORY_FILE, sub_story_payload, build)
+            stats['chunks'] = sorted({*stats['chunks'], *stats['sub_story_archive_patch']['chunks']})
+            self.log('Đã gắn dữ liệu cốt truyện phụ vào chunk game.')
+
+        for rel in IDENTITY_FILES:
+            source = self.resources / rel
+            if not source.exists():
+                continue
+            if rel.endswith('.etag'):
+                original = manifest_identity(source.read_bytes(), ar.data)
+                patched = manifest_identity(source.read_bytes(), (build / 'manifest.ssra').read_bytes())
+            else:
+                original, patched = ar.data, (build / 'manifest.ssra').read_bytes()
+            atomic_bytes(build / 'original_metadata' / rel, original)
+            atomic_bytes(build / rel, patched)
+
+        files = {'chunks/' + x.name: x for x in (build / 'chunks').glob('*.ssrc')}
+        files['manifest.ssra'] = build / 'manifest.ssra'
+        files.update({rel: build / rel for rel in IDENTITY_FILES if (build / rel).exists()})
+        backup = self.data / 'backups' / fingerprint
+        originals = {}
+        for rel in files:
+            if rel == 'manifest.ssra':
+                source = ar.manifest_path
+            elif rel in IDENTITY_FILES:
+                source = build / 'original_metadata' / rel
+            else:
+                source = Path(ar.overrides.get(Path(rel).name, self.resources / rel))
+            destination = contained(backup, rel)
+            digest = sha(source)
+            if destination.exists():
+                if sha(destination) != digest:
+                    raise RuntimeError('Bản sao lưu trước đó không khớp checksum.')
+            else:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                atomic_bytes(destination, source.read_bytes())
+            originals[rel] = digest
+
+        new_state = {
+            'schema': 1,
+            'version': VERSION,
+            'game_dir': str(self.game),
+            'installed': True,
+            'backup': str(backup.relative_to(self.data)),
+            'original_hashes': originals,
+            'patched_hashes': {rel: sha(p) for rel, p in files.items()},
+            'patch_file': patch_file.name,
+            'time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        }
+        self.log('Đang ghi bản vá vào game với bảo vệ atomic...')
+        self._transaction(files, new_state)
+        self.log(f'Đã cài thành công {len(accepted):,} mục tiếng Việt từ gói GitHub!')
 
     def restore(self):
         require_game_closed()

@@ -13,49 +13,11 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ReleaseClient {
-    public static final String DEFAULT_CHANNEL="https://github.com/doubleD1302/CZN-VH/releases/download/releases-1.0/localadb-channel.json";
-    public static java.net.HttpURLConnection open(String url)throws Exception{
-        for(int i=0;i<6;i++){
-            URL u=new URL(url);
-            if(!u.getProtocol().equals("https")||u.getUserInfo()!=null)throw new IOException("Kênh cập nhật phải dùng HTTPS.");
-            HttpURLConnection c=(HttpURLConnection)u.openConnection();
-            c.setConnectTimeout(10000);
-            c.setReadTimeout(30000);
-            c.setInstanceFollowRedirects(false);
-            c.setRequestProperty("User-Agent","CZN-VietHoa-Android/1.4.1");
-            int code;
-            try {
-                code=c.getResponseCode();
-            } catch (UnknownHostException uhe) {
-                c.disconnect();
-                throw new IOException("Không thể kết nối máy chủ " + u.getHost() + " (lỗi DNS mạng hoặc không có Internet).", uhe);
-            } catch (SocketTimeoutException ste) {
-                c.disconnect();
-                throw new IOException("Hết thời gian chờ kết nối máy chủ " + u.getHost() + ".", ste);
-            }
-            if(code>=300&&code<400){
-                String next=c.getHeaderField("Location");
-                c.disconnect();
-                if(next==null)throw new IOException("Link chuyển hướng không hợp lệ.");
-                url=new URL(u,next).toString();
-                continue;
-            }
-            if(code!=200){
-                c.disconnect();
-                throw new HttpFailure(code);
-            }
-            return c;
-        }
-        throw new IOException("Quá nhiều chuyển hướng.");
-    }
+    public static final String DEFAULT_CHANNEL="https://github.com/doubleD1302/CZN-VH/releases/latest/download/channel.json";
+    public static java.net.HttpURLConnection open(String url)throws Exception{for(int i=0;i<6;i++){URL u=new URL(url);if(!u.getProtocol().equals("https")||u.getUserInfo()!=null)throw new IOException("Kênh cập nhật phải dùng HTTPS.");HttpURLConnection c=(HttpURLConnection)u.openConnection();c.setConnectTimeout(10000);c.setReadTimeout(30000);c.setInstanceFollowRedirects(false);c.setRequestProperty("User-Agent","CZN-VietHoa-Android/1.4.1");int code=c.getResponseCode();if(code>=300&&code<400){String next=c.getHeaderField("Location");c.disconnect();if(next==null)throw new IOException("Link chuyển hướng không hợp lệ.");url=new URL(u,next).toString();continue;}if(code!=200){c.disconnect();throw new HttpFailure(code);}return c;}throw new IOException("Quá nhiều chuyển hướng.");}
     public static JSONObject verify(String envelope)throws Exception{return PatchFormat.signed(envelope,Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));}
     public static JSONObject check(Context ctx)throws Exception{
-        String url=ctx.getSharedPreferences("czn_settings",0).getString("channel",DEFAULT_CHANNEL);
-        if(url==null||url.endsWith("/channel.json")||url.contains("latest/download/channel.json")||url.contains("/releases/download/releases/")){
-            url=DEFAULT_CHANNEL;
-            ctx.getSharedPreferences("czn_settings",0).edit().putString("channel",DEFAULT_CHANNEL).apply();
-        }
-        HttpURLConnection c=open(url);String envelope;
+        String url=ctx.getSharedPreferences("czn_settings",0).getString("channel",DEFAULT_CHANNEL);HttpURLConnection c=open(url);String envelope;
         try(InputStream in=c.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){if(out.size()+n>262144)throw new IOException("Metadata quá lớn.");out.write(b,0,n);}envelope=out.toString("UTF-8");}finally{c.disconnect();}
         JSONObject channel=verify(envelope);if(channel.getInt("schema")!=1||!channel.getString("type").equals("channel"))throw new IOException("Kênh cập nhật sai định dạng.");int code=channel.getInt("patch_code");int seen=ctx.getSharedPreferences("czn_settings",0).getInt("highest_patch_code",10400);if(code<seen)throw new IOException("Máy chủ trả bản cập nhật cũ; đã từ chối hạ phiên bản.");
         if(channel.getLong("patch_size")<=0||channel.getLong("patch_size")>67108864L||!channel.getString("patch_sha256").matches("[a-f0-9]{64}"))throw new IOException("Thông tin gói không hợp lệ.");
@@ -74,9 +36,9 @@ public final class ReleaseClient {
         File dir=UpdateCache.directory(ctx.getFilesDir()),result=new File(dir,hash+(apk?".apk":".cznpatch"));
         File partial=new File(dir,hash+".part-"+UUID.randomUUID());
         try(UpdateCache.Lease lease=UpdateCache.acquire(result,partial)) {
-            if(result.exists()&&result.length()==size&&PatchFormat.sha(result).equals(hash)){cleanup(ctx);return result;}
+            if(result.exists()&&result.length()==size&&PatchFormat.sha(result).equals(hash)){if(!apk)UpdatePolicy.verifyPatchIdentity(channel,result,Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));cleanup(ctx);return result;}
             HttpURLConnection c=openAsset(url,size,hash,apk);
-            try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(partial)){MessageDigest d=MessageDigest.getInstance("SHA-256");byte[] b=new byte[65536];int n;long count=0;while((n=in.read(b))!=-1){if(cancelled.get())throw new IOException("Đã hủy tải; dữ liệu game giữ nguyên.");count+=n;if(count>size)throw new IOException("Gói tải vượt kích thước công bố.");out.write(b,0,n);d.update(b,0,n);progress.report("Đang tải: "+(count/1048576)+" / "+((size+1048575)/1048576)+" MB",(int)(count*100/size));}out.getFD().sync();if(count!=size||!PatchFormat.hex(d.digest()).equals(hash))throw new IOException("Gói tải không khớp SHA-256; đã từ chối cài.");Files.move(partial.toPath(),result.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);cleanup(ctx);return result;}finally{c.disconnect();Files.deleteIfExists(partial.toPath());}
+            try(InputStream in=c.getInputStream();FileOutputStream out=new FileOutputStream(partial)){MessageDigest d=MessageDigest.getInstance("SHA-256");byte[] b=new byte[65536];int n;long count=0;while((n=in.read(b))!=-1){if(cancelled.get())throw new IOException("Đã hủy tải; dữ liệu game giữ nguyên.");count+=n;if(count>size)throw new IOException("Gói tải vượt kích thước công bố.");out.write(b,0,n);d.update(b,0,n);progress.report("Đang tải: "+(count/1048576)+" / "+((size+1048575)/1048576)+" MB",(int)(count*100/size));}out.getFD().sync();if(count!=size||!PatchFormat.hex(d.digest()).equals(hash))throw new IOException("Gói tải không khớp SHA-256; đã từ chối cài.");Files.move(partial.toPath(),result.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);if(!apk)UpdatePolicy.verifyPatchIdentity(channel,result,Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));cleanup(ctx);return result;}finally{c.disconnect();Files.deleteIfExists(partial.toPath());}
         }
     }
 

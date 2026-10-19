@@ -1,8 +1,13 @@
 package vn.czn.viethoa.czn_patcher;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.Arrays;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import org.json.JSONObject;
 
 /** Checks shared by foreground app updates and background update notices. */
@@ -55,5 +60,45 @@ public final class UpdatePolicy {
         if (current.length == 0 || !Arrays.equals(current, candidate)) {
             throw new IOException("APK không có cùng chứng chỉ với ứng dụng đang cài.");
         }
+    }
+
+    public static JSONObject verifyPatchIdentity(JSONObject channel, File patchFile, byte[] publicKey) throws Exception {
+        if (!patchFile.exists() || !patchFile.isFile()) {
+            throw new IOException("Tệp bản dịch không tồn tại: " + patchFile.getName());
+        }
+        JSONObject release;
+        try (ZipFile zip = new ZipFile(patchFile)) {
+            ZipEntry entry = zip.getEntry("release.json");
+            if (entry == null) {
+                throw new IOException("Gói bản dịch thiếu release.json.");
+            }
+            try (InputStream in = zip.getInputStream(entry);
+                 ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) {
+                    if (out.size() + n > 262144) throw new IOException("Metadata release.json quá lớn.");
+                    out.write(buf, 0, n);
+                }
+                release = PatchFormat.signed(out.toString("UTF-8"), publicKey);
+            }
+        }
+        int pkgCode = release.getInt("version_code");
+        String pkgVer = release.getString("version");
+        int expectedCode = channel.getInt("patch_code");
+        String expectedVer = channel.getString("patch_version");
+
+        if (pkgCode != expectedCode || !expectedVer.equals(pkgVer)) {
+            throw new IOException("Lệch danh tính bản dịch: Kênh quảng bá " + expectedVer + " (code " + expectedCode
+                    + ") nhưng tệp tải về là " + pkgVer + " (code " + pkgCode + "). [PATCH_IDENTITY_MISMATCH]");
+        }
+        if (release.getInt("schema") != 2) {
+            throw new IOException("Schema gói bản dịch không hợp lệ.");
+        }
+        if (release.getInt("min_patcher") > PatchEngine.CURRENT_PATCHER_CODE) {
+            throw new IOException("Gói yêu cầu phiên bản ứng dụng tối thiểu " + release.getInt("min_patcher")
+                    + " nhưng phiên bản hiện tại là " + PatchEngine.CURRENT_PATCHER_CODE + ".");
+        }
+        return release;
     }
 }

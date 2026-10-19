@@ -19,8 +19,13 @@ public final class PatchFormat {
     public static final String COUNSELING = "db/story_counseling_260930@story.db";
     public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
         "manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev",
-        "chunks/lang_ja_b01_0.ssrc", "chunks/base_b21_0.ssrc", "chunks/base_b17_0.ssrc",
-        "chunks/base_b22_0.ssrc", "chunks/base_b32_0.ssrc", "chunks/base_b01_0.ssrc"
+        "chunks/lang_ja_b01_0.ssrc",
+        "chunks/base_b01_0.ssrc", "chunks/base_b02_0.ssrc", "chunks/base_b04_0.ssrc",
+        "chunks/base_b06_0.ssrc", "chunks/base_b07_0.ssrc", "chunks/base_b09_0.ssrc", "chunks/base_b12_0.ssrc",
+        "chunks/base_b13_0.ssrc", "chunks/base_b14_0.ssrc", "chunks/base_b17_0.ssrc",
+        "chunks/base_b19_0.ssrc", "chunks/base_b21_0.ssrc", "chunks/base_b22_0.ssrc",
+        "chunks/base_b23_0.ssrc", "chunks/base_b29_0.ssrc", "chunks/base_b30_0.ssrc",
+        "chunks/base_b31_0.ssrc", "chunks/base_b32_0.ssrc"
     ));
     public static String sha(File f) throws Exception { try(InputStream in = new FileInputStream(f)){return sha(in);} }
     public static String sha(InputStream in) throws Exception { MessageDigest d=MessageDigest.getInstance("SHA-256"); byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) d.update(b,0,n); return hex(d.digest()); }
@@ -56,7 +61,7 @@ public final class PatchFormat {
         for(int i=0;i<ng;i++){int k=gp+16+i*24;groups.put(b.getShort(k)&65535,str(pos((long)names+b.getInt(k+4)),end));}
         for(int i=0;i<nc;i++){int k=co+i*32;Chunk c=new Chunk();c.index=i;c.id=b.getInt(k);c.gid=b.getShort(k+4)&65535;c.size=b.getLong(k+8);c.total=b.getLong(k+16);c.checksum=b.getLong(k+24);if(c.size<0||c.total!=c.size+16)throw new IOException("Chunk SSRA không hợp lệ.");c.name=groups.get(c.gid)+String.format(Locale.ROOT,"_b%02d_0.ssrc",c.id);chunks.add(c);}
         Map<Integer,Long> starts=new HashMap<>();List<Chunk> sorted=new ArrayList<>(chunks);sorted.sort(Comparator.comparingInt(c->c.id));for(Chunk c:sorted){c.start=starts.getOrDefault(c.gid,0L);starts.put(c.gid,c.start+c.size);}
-        int search=end;if(tag(end,"CNAM")){int cnt=b.getInt(end+4),ns=b.getInt(end+12);if(cnt!=nc||b.getInt(end+8)!=0||ns<0)throw new IOException("CNAM không hợp lệ.");int sn=pos((long)end+16+cnt*8L),se=pos((long)sn+ns);if(ns>0)for(int i=0;i<cnt;i++){int ci=b.getInt(end+16+i*8),no=b.getInt(end+20+i*8);if(ci<0||ci>=nc)throw new IOException("CNAM index.");String name=str(pos((long)sn+no),se);if(name.contains("/")||name.contains("\\")||name.contains(".."))throw new IOException("Tên chunk không hợp lệ.");chunks.get(ci).name=name;}search=se;}
+        int search=end;if(tag(end,"CNAM")){int cnt=b.getInt(end+4),ns=b.getInt(end+12);if(cnt!=nc||b.getInt(end+8)!=0||ns<0)throw new IOException("CNAM không hợp lệ.");int sn=pos((long)end+16+cnt*8L),se=pos((long)sn+ns);if(ns>0){for(int i=0;i<cnt;i++){int ci=b.getInt(end+16+i*8),no=b.getInt(end+20+i*8);if(ci<0||ci>=nc)throw new IOException("CNAM index.");String name=str(pos((long)sn+no),se);if(name.contains("/")||name.contains("\\")||name.contains(".."))throw new IOException("Tên chunk không hợp lệ.");chunks.get(ci).name=name;}}else{for(int i=0;i<cnt;i++){int ci=b.getInt(end+16+i*8),no=b.getInt(end+20+i*8);if(ci<0||ci>=nc)throw new IOException("CNAM index.");String name=str(so+no,so+ss);if(name.contains("/")||name.contains("\\")||name.contains(".."))throw new IOException("Tên chunk không hợp lệ.");chunks.get(ci).name=name;}}search=se;}
         int hp=-1;for(int i=search;i<=data.length-16;i++)if(tag(i,"FHSH")&&i+16+nf*8L==data.length){hp=i;break;}
         if(hp<0||b.getInt(hp+4)!=nf||b.getInt(hp+8)!=1||b.getInt(hp+12)!=0)throw new IOException("Checksum SSRA chưa hỗ trợ.");fh=hp+16;
         for(int i=0;i<nf;i++){int k=fo+i*40;if((b.getInt(k+36)&1)!=0)continue;int no=b.getInt(k+28);if(no<0||no>=ss)throw new IOException("Tên file SSRA.");Entry f=new Entry();f.index=i;f.pos=k;f.name=str(so+no,so+ss).replace('\\','/');while(f.name.startsWith("/"))f.name=f.name.substring(1);f.offset=b.getLong(k+8);f.cs=b.getInt(k+16);f.us=b.getInt(k+20);f.comp=data[k+32]&255;f.enc=data[k+33]&255;f.gid=b.getShort(k+34)&65535;f.hash=b.getLong(fh+i*8);if(files.put(f.name,f)!=null)throw new IOException("ID file SSRA trùng.");}

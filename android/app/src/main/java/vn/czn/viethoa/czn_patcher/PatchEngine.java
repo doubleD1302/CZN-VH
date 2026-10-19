@@ -11,7 +11,7 @@ import java.util.zip.*;
 
 /** Streaming staging, verified backups, atomic file replacement and durable rollback journal. */
 public final class PatchEngine {
-    public static final int CURRENT_PATCHER_CODE = 10703;
+    public static final int CURRENT_PATCHER_CODE = 10801;
     public interface Progress { void report(String label,int percent); }
     public interface CommitHook { void before(int index,String path)throws Exception; }
     private final byte[] key;public CommitHook hook=(i,p)->{};
@@ -40,10 +40,37 @@ public final class PatchEngine {
         File cache=PatchFormat.safe(root,"manifest.ssra.etag");if(cache.isFile())out.put("cache_identity",CacheIdentity.describe(PatchFormat.bytes(cache,65536)));
         return out;
     }
+    private static final Map<String, String> EXPECTED_CHUNKS = new HashMap<>();
+    static {
+        EXPECTED_CHUNKS.put("text/ja/text.db", "lang_ja_b01_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.STORY, "base_b21_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.SUB_STORY, "base_b17_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.MESSENGER, "base_b22_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.VISIT, "base_b31_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.FRIENDSHIP, "base_b31_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.COUNSELING, "base_b01_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part1_251203@story.db", "base_b13_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part2_260708@story.db", "base_b13_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_etc_260909@story.db", "base_b12_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1004_251022@story.db", "base_b06_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1041_251224@story.db", "base_b23_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1052_260225@story.db", "base_b12_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1061_260408@story.db", "base_b09_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1062_260729@story.db", "base_b19_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_30048_260708@story.db", "base_b22_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part3_260729@story.db", "base_b14_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part4_260930@story.db", "base_b17_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part5_260909@story.db", "base_b02_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part1_260114@story.db", "base_b04_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part2_260708@story.db", "base_b14_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part3_260708@story.db", "base_b13_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part4_260729@story.db", "base_b29_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part5_260909@story.db", "base_b02_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_counseling_memoryerase@story.db", "base_b07_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_live_event_260930@story.db", "base_b07_0.ssrc");
+    }
     private static boolean isAllowedSlot(String f){
-        return f.equals("text/ja/text.db")||f.equals(PatchFormat.STORY)||f.equals(PatchFormat.SUB_STORY)
-            ||f.equals(PatchFormat.MESSENGER)||f.equals(PatchFormat.VISIT)||f.equals(PatchFormat.FRIENDSHIP)
-            ||f.equals(PatchFormat.COUNSELING);
+        return EXPECTED_CHUNKS.containsKey(f);
     }
     public JSONObject apply(File root,InputStream zip,Progress progress)throws Exception{
         File h=home(root);h.mkdirs();try(RandomAccessFile lock=new RandomAccessFile(new File(h,"operation.lock"),"rw");FileLock guard=lock.getChannel().tryLock()){
@@ -64,19 +91,14 @@ public final class PatchEngine {
                 progress.report("Xác minh chữ ký và gói bản dịch",10);JSONObject release;Map<String,File> payloads=new HashMap<>();
                 try(ZipInputStream z=new ZipInputStream(zip)){ZipEntry e=z.getNextEntry();if(e==null||!e.getName().equals("release.json"))throw new IOException("Gói cũ/chưa có chữ ký. Hãy dùng gói CZN Android v2.");ByteArrayOutputStream descriptor=new ByteArrayOutputStream();byte[] b=new byte[65536];int n;while((n=z.read(b))!=-1){if(descriptor.size()+n>262144)throw new IOException("Metadata quá lớn.");descriptor.write(b,0,n);}release=PatchFormat.signed(descriptor.toString("UTF-8"),key);
                     if(release.getInt("schema")!=2||release.getInt("min_patcher")>CURRENT_PATCHER_CODE||release.getInt("version_code")<10400)throw new IOException("Gói cần phiên bản ứng dụng mới hơn.");if(prior!=null&&release.getInt("version_code")<prior.getInt("version_code"))throw new IOException("Không tự hạ phiên bản bản dịch.");
-                    JSONArray patches=release.getJSONArray("patches");if(patches.length()<2||patches.length()>7)throw new IOException("Gói phải có từ 2 đến 7 slot JP đã kiểm chứng.");Set<String> allowed=new HashSet<>(),names=new HashSet<>();for(int i=0;i<patches.length();i++){JSONObject p=patches.getJSONObject(i);String f=p.getString("file"),payload=p.getString("payload");if(!isAllowedSlot(f)||!names.add(f)||!payload.matches("payload/[a-z_]+\\.zst")||!allowed.add(payload))throw new IOException("Whitelist gói không hợp lệ: "+f);}
+                    JSONArray patches=release.getJSONArray("patches");if(patches.length()<2||patches.length()>35)throw new IOException("Gói phải có từ 2 đến 35 slot JP đã kiểm chứng.");Set<String> allowed=new HashSet<>(),names=new HashSet<>();for(int i=0;i<patches.length();i++){JSONObject p=patches.getJSONObject(i);String f=p.getString("file"),payload=p.getString("payload");if(!isAllowedSlot(f)||!names.add(f)||!payload.matches("payload/[a-z_0-9]+\\.zst")||!allowed.add(payload))throw new IOException("Whitelist gói không hợp lệ: "+f);}
                     long total=0;while((e=z.getNextEntry())!=null){String name=e.getName();if(e.isDirectory()||!allowed.contains(name)||payloads.containsKey(name))throw new IOException("File lạ/trùng trong ZIP.");File target=new File(work,name);target.getParentFile().mkdirs();try(FileOutputStream out=new FileOutputStream(target)){while((n=z.read(b))!=-1){total+=n;if(total>67108864L)throw new IOException("Gói giải nén quá lớn.");out.write(b,0,n);}out.getFD().sync();}payloads.put(name,target);}if(payloads.size()!=allowed.size())throw new IOException("Gói thiếu payload.");
                 }
                 progress.report("Kiểm tra nguồn Nhật trên thiết bị",25);PatchFormat manifest=new PatchFormat(PatchFormat.bytes(new File(sourceRoot,"manifest.ssra"),16777216));File stage=new File(work,"stage");Map<String,File> replacements=new LinkedHashMap<>();JSONArray patches=release.getJSONArray("patches");List<JSONObject> activePatches=new ArrayList<>();long required=33554432L;
                 for(int i=0;i<patches.length();i++){
                     JSONObject p=patches.getJSONObject(i);String file=p.getString("file");PatchFormat.Entry f=manifest.files.get(file);if(f==null)throw new IOException("Thiếu slot JP: "+file);PatchFormat.Chunk c=manifest.chunk(f);
-                    String wanted;
-                    if(f.name.equals(PatchFormat.STORY))wanted="base_b21_0.ssrc";
-                    else if(f.name.equals(PatchFormat.SUB_STORY))wanted="base_b17_0.ssrc";
-                    else if(f.name.equals(PatchFormat.MESSENGER))wanted="base_b22_0.ssrc";
-                    else if(f.name.equals(PatchFormat.VISIT)||f.name.equals(PatchFormat.FRIENDSHIP))wanted="base_b32_0.ssrc";
-                    else if(f.name.equals(PatchFormat.COUNSELING))wanted="base_b01_0.ssrc";
-                    else wanted="lang_ja_b01_0.ssrc";
+                    String wanted=EXPECTED_CHUNKS.get(f.name);
+                    if(wanted==null)wanted="lang_ja_b01_0.ssrc";
                     if(!c.name.equals(wanted)||f.enc!=0||f.comp!=1||f.cs!=p.getInt("source_cs")||f.us!=p.getInt("source_us")||f.hash!=PatchFormat.hexLong(p.getString("source_xxh64")))throw new IOException("Nguồn JP đã đổi; cần bản dịch tương thích mới.");
                     File src=sourceFile(sourceRoot,root,"chunks/"+c.name);
                     boolean isOptional=!file.equals("text/ja/text.db")&&!file.equals(PatchFormat.STORY);

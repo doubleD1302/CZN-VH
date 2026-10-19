@@ -23,6 +23,12 @@ class FormatError(ValueError):
     pass
 
 
+class MissingChunkError(FormatError, RuntimeError):
+    def __init__(self, chunk_name, message):
+        self.chunk_name = chunk_name
+        super().__init__(message)
+
+
 def u40(data, pos):
     return (data[pos] << 32) | struct.unpack_from('<I', data, pos + 1)[0]
 
@@ -204,20 +210,36 @@ class Archive:
                 start += chunk['size']
         cnam = names + gs
         self.fhash = None
+        st = d[so:so + ss]
         if d[cnam:cnam + 4] == b'CNAM':
             cnt, reserved, namesize = struct.unpack_from('<III', d, cnam + 4)
             if cnt != nc or reserved != 0:
                 raise FormatError('Bảng tên chunk không hợp lệ.')
-            # CNAM has entry pairs followed by the string bytes when namesize > 0.
+            # A zero namesize means offsets into the manifest string table,
+            # not absent names. Chunk IDs need not match physical filenames.
             cnames = cnam + 16 + cnt * 8
-            if namesize:
-                for i in range(cnt):
-                    ci, no = struct.unpack_from('<II', d, cnam + 16 + i * 8)
-                    name = d[cnames + no:d.index(0, cnames + no, cnames + namesize)].decode('utf-8')
-                    if ci >= nc or Path(name).name != name or '/' in name or '\\' in name:
-                        raise FormatError('Tên chunk không an toàn.')
-                    self.chunks[ci]['name'] = name
-            # Some clients have CNAM offsets with names omitted (namesize=0).
+            if cnames + namesize > len(d):
+                raise FormatError('Bảng tên chunk vượt manifest.')
+            name_table = d[cnames:cnames + namesize] if namesize else st
+            seen_indices, seen_names = set(), set()
+            for i in range(cnt):
+                ci, no = struct.unpack_from('<II', d, cnam + 16 + i * 8)
+                if ci >= nc or ci in seen_indices or no >= len(name_table):
+                    raise FormatError('Chỉ mục tên chunk không hợp lệ hoặc bị trùng.')
+                end = name_table.find(b'\0', no)
+                if end < 0:
+                    raise FormatError('Tên chunk thiếu ký tự kết thúc.')
+                try:
+                    name = name_table[no:end].decode('utf-8')
+                except UnicodeDecodeError as error:
+                    raise FormatError('Tên chunk không phải UTF-8 hợp lệ.') from error
+                if (not name or name in ('.', '..') or Path(name).name != name
+                        or any(x in name for x in '/\\:') or not name.endswith('.ssrc')
+                        or name.casefold() in seen_names):
+                    raise FormatError('Tên chunk không an toàn hoặc bị trùng.')
+                seen_indices.add(ci)
+                seen_names.add(name.casefold())
+                self.chunks[ci]['name'] = name
             search_from = cnames + namesize
         else:
             search_from = cnam
@@ -248,6 +270,18 @@ class Archive:
         name = chunk['name']
         if name not in self._cache:
             p = Path(self.overrides.get(name, self.root / 'chunks' / name))
+            # Never substitute a same-sized file: the writer and the native
+            # game must address the exact same physical name from CNAM.
+            if not p.is_file():
+                if name.startswith('lang_ja_'):
+                    raise MissingChunkError(name,
+                        f'Chưa phát hiện gói dữ liệu Tiếng Nhật trong game ({name}). '
+                        'Hãy mở game CZN lên, vào Cài đặt ➔ Ngôn ngữ chọn 日本語 (Tiếng Nhật) để game tải dữ liệu trước, rồi quay lại đây bấm Cài Tiếng Việt nhé.'
+                    )
+                raise MissingChunkError(name,
+                    f'Game chưa tải đủ tệp dữ liệu ({name}). '
+                    'Hãy mở game để tải đủ dữ liệu cập nhật, hoặc bấm Kiểm tra tệp tin trên STOVE.'
+                )
             data = p.read_bytes()
             if len(data) != chunk['total'] or chunk['total'] != chunk['size'] + 16:
                 raise FormatError('Kích thước chunk không khớp: ' + name)
@@ -329,7 +363,39 @@ class Archive:
 
     def patch_story_file(self, filename, encrypted, output):
         """Patch the validated inline JP story table within its original slot."""
-        if filename != 'db/story_main_part1new_260729@story.db':
+        story_chunk_map = {
+            'db/story_main_part1new_260729@story.db': 'base_b21_0.ssrc',
+            'db/story_sub_part1new_260729@story.db': 'base_b17_0.ssrc',
+            'db/story_char_messenger_chat_260930@story.db': 'base_b22_0.ssrc',
+            'db/story_visit_260930@story.db': 'base_b31_0.ssrc',
+            'db/story_friendship_260930@story.db': 'base_b31_0.ssrc',
+            'db/story_counseling_260930@story.db': 'base_b01_0.ssrc',
+            # Nhóm 1: Tutorial
+            'db/story_main_part1_251203@story.db': 'base_b13_0.ssrc',
+            'db/story_main_part2_260708@story.db': 'base_b13_0.ssrc',
+            'db/story_etc_260909@story.db': 'base_b12_0.ssrc',
+            # Nhóm 4: Trauma Code
+            'db/story_trauma_code_1004_251022@story.db': 'base_b06_0.ssrc',
+            'db/story_trauma_code_1041_251224@story.db': 'base_b23_0.ssrc',
+            'db/story_trauma_code_1052_260225@story.db': 'base_b12_0.ssrc',
+            'db/story_trauma_code_1061_260408@story.db': 'base_b09_0.ssrc',
+            'db/story_trauma_code_1062_260729@story.db': 'base_b19_0.ssrc',
+            'db/story_trauma_code_30048_260708@story.db': 'base_b22_0.ssrc',
+            # Nhóm 2: Main Story mở rộng
+            'db/story_main_part3_260729@story.db': 'base_b14_0.ssrc',
+            'db/story_main_part4_260930@story.db': 'base_b17_0.ssrc',
+            'db/story_main_part5_260909@story.db': 'base_b02_0.ssrc',
+            # Nhóm 3: Sub Story
+            'db/story_sub_part1_260114@story.db': 'base_b04_0.ssrc',
+            'db/story_sub_part2_260708@story.db': 'base_b14_0.ssrc',
+            'db/story_sub_part3_260708@story.db': 'base_b13_0.ssrc',
+            'db/story_sub_part4_260729@story.db': 'base_b29_0.ssrc',
+            'db/story_sub_part5_260909@story.db': 'base_b02_0.ssrc',
+            # Nhóm 5: Sự kiện & Ngoại truyện
+            'db/story_counseling_memoryerase@story.db': 'base_b07_0.ssrc',
+            'db/story_live_event_260930@story.db': 'base_b07_0.ssrc',
+        }
+        if filename not in story_chunk_map:
             raise FormatError('Bảng kịch bản chưa được hỗ trợ.')
         f = self.files[filename]
         if f['enc']:
@@ -345,8 +411,9 @@ class Archive:
         manifest, cursor = bytearray(self.data), 0
         stream = compressed + bytes(f['cs'] - len(compressed))
         touched = []
+        expected_chunk = story_chunk_map[filename]
         for chunk, off, size in self.segments(f):
-            if chunk['name'] != 'base_b21_0.ssrc':
+            if chunk['name'] != expected_chunk:
                 raise FormatError('Vị trí story đã đổi sau cập nhật; cần xác minh vùng chứa mới.')
             original = self.chunk_bytes(chunk)
             buf = bytearray(original)
@@ -354,9 +421,10 @@ class Archive:
             cursor += size
             # Every byte outside the old story slot (except checksum footer)
             # must remain identical, including all other game resources.
-            if buf[:off] != original[:off] or buf[off + size:-8] != original[off + size:-8]:
+            mv_buf, mv_orig = memoryview(buf), memoryview(original)
+            if mv_buf[:off] != mv_orig[:off] or mv_buf[off + size:-8] != mv_orig[off + size:-8]:
                 raise FormatError('Story patch changed unrelated resource bytes')
-            checksum = xxhash.xxh64_intdigest(buf[:-16])
+            checksum = xxhash.xxh64_intdigest(mv_buf[:-16])
             struct.pack_into('<Q', buf, len(buf) - 8, checksum)
             struct.pack_into('<Q', manifest, self.chunk_table + chunk['index'] * 32 + 24, checksum)
             (output / 'chunks' / chunk['name']).write_bytes(buf)
@@ -373,7 +441,40 @@ class Archive:
                     unrelated_resource_bytes_identical=True)
 
 
-TOKENS = re.compile(r'\{[^{}\r\n]+\}|<[^>\r\n]*>|\$[^$\r\n]+\$|%(?:\d+\$)?[sdif]|\\[nr]')
+TOKENS = re.compile(r'\{[^{}\r\n]+\}|<[^>\r\n]*>|\$[^$<>\r\n]+\$|%(?:\d+\$)?[sdif]|\\[nr]')
+_TECH_TOKENS = re.compile(r'\{[^{}\r\n]+\}|<[^>\r\n]*>|%(?:\d+\$)?[sdif]|\\[nr]')
+_DOLLAR_TOKENS = re.compile(r'(?<!<)\$[^$<>\r\n]+\$(?!>)')
+_TOKEN_MAP = None
+
+
+def _get_token_map():
+    global _TOKEN_MAP
+    if _TOKEN_MAP is None:
+        _TOKEN_MAP = {}
+        candidates = []
+        if getattr(sys, 'frozen', False):
+            if hasattr(sys, '_MEIPASS'):
+                candidates.append(Path(sys._MEIPASS) / 'MAPPING_479_JP_TOKENS.json')
+                candidates.append(Path(sys._MEIPASS) / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+            exe_dir = Path(sys.executable).resolve().parent
+            candidates.append(exe_dir / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+            candidates.append(exe_dir / 'CZN_VietHoa_Project' / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+        candidates.append(Path(__file__).resolve().parent.parent / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+        candidates.append(Path.cwd() / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+        candidates.append(Path.cwd() / 'CZN_VietHoa_Project' / 'data' / 'reports' / 'MAPPING_479_JP_TOKENS.json')
+        candidates.append(Path('C:/ProgramData/Smilegate/Games/ChaosZeroNightmare/CZN_VietHoa_Project/data/reports/MAPPING_479_JP_TOKENS.json'))
+        mapping_file = next((p for p in candidates if p.is_file()), None)
+        if mapping_file:
+            try:
+                import json
+                with mapping_file.open('r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    for k, v in data.items():
+                        if isinstance(v, dict) and v.get('vi'):
+                            _TOKEN_MAP['$' + k + '$'] = '$' + v['vi'] + '$'
+            except Exception:
+                pass
+    return _TOKEN_MAP
 
 
 def tokens(text):
@@ -386,6 +487,21 @@ def validate_translation(source, target):
         return 'Bản dịch trống'
     if '\0' in target:
         return 'Có ký tự NUL'
-    if tokens(source) != tokens(target):
-        return 'Thẻ hoặc biến khác bản gốc: ' + repr(dict(tokens(source) - tokens(target))) + ' / ' + repr(dict(tokens(target) - tokens(source)))
+    if tokens(source) == tokens(target):
+        return None
+
+    from collections import Counter
+    source_tech = Counter(_TECH_TOKENS.findall(source))
+    target_tech = Counter(_TECH_TOKENS.findall(target))
+    if source_tech != target_tech:
+        return 'Thẻ hoặc biến khác bản gốc: ' + repr(dict(source_tech - target_tech)) + ' / ' + repr(dict(target_tech - source_tech))
+
+    source_dollars = Counter(_DOLLAR_TOKENS.findall(source))
+    target_dollars = Counter(_DOLLAR_TOKENS.findall(target))
+    tmap = _get_token_map()
+    expected_dollars = Counter(tmap.get(tok, tok) for tok in _DOLLAR_TOKENS.findall(source))
+    if expected_dollars != target_dollars:
+        return 'Thẻ hoặc biến khác bản gốc: ' + repr(dict(expected_dollars - target_dollars)) + ' / ' + repr(dict(target_dollars - expected_dollars))
+
     return None
+
