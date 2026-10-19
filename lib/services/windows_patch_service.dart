@@ -8,8 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Dịch vụ vá tiếng Việt và quản lý cập nhật dành riêng cho Windows PC.
 /// Phiên bản ứng dụng tách khỏi phiên bản bản dịch trong kênh đã ký.
 class WindowsPatchService {
-  static const currentVersion = '2.1.17';
-  static const currentVersionCode = 20117;
+  static const currentVersion = '2.1.18';
+  static const currentVersionCode = 20118;
   static const channelUrl =
       'https://github.com/doubleD1302/CZN-VH/releases/download/releases-1.0/windows-channel.json';
 

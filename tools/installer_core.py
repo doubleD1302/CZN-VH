@@ -460,9 +460,20 @@ class Installer:
                    if rel.startswith('chunks/') and rel not in files]
         if not retired:
             return {}
-        if (sha(self.resources / 'manifest.ssra') != self.state['patched_hashes'].get('manifest.ssra')
-                or hashlib.sha256(ar.data).hexdigest() != self.state['original_hashes'].get('manifest.ssra')):
+
+        live_manifest_sha = sha(self.resources / 'manifest.ssra')
+        manifest_clean_sha = hashlib.sha256(ar.data).hexdigest()
+        manifest_original_sha = self.state.get('original_hashes', {}).get('manifest.ssra')
+        manifest_patched_sha = self.state.get('patched_hashes', {}).get('manifest.ssra')
+
+        # If actual original manifest changed (real Smilegate game update), abort:
+        if manifest_clean_sha != manifest_original_sha:
             raise RuntimeError('Game đã đổi phiên bản; không tự khôi phục chunk cũ. Hãy kiểm tra tệp bằng STOVE.')
+
+        # Live manifest must either match the previous patched manifest OR the clean original manifest
+        if live_manifest_sha != manifest_patched_sha and live_manifest_sha != manifest_original_sha:
+            raise RuntimeError('Game đã đổi phiên bản; không tự khôi phục chunk cũ. Hãy kiểm tra tệp bằng STOVE.')
+
         backup = self._backup_dir()
         chunks = {c['name']: c for c in ar.chunks}
         restored = {}
@@ -471,17 +482,26 @@ class Installer:
                 raise ValueError('Chunk cũ nằm ngoài phạm vi khôi phục.')
             source = contained(backup, rel)
             target = contained(self.resources, rel)
-            if (not source.is_file() or not target.is_file()
-                    or sha(source) != self.state['original_hashes'].get(rel)
-                    or sha(target) != self.state['patched_hashes'][rel]):
+            orig_hash = self.state.get('original_hashes', {}).get(rel)
+            patched_hash = self.state.get('patched_hashes', {}).get(rel)
+
+            if not source.is_file() or not target.is_file() or sha(source) != orig_hash:
                 raise RuntimeError('Chunk cũ hoặc bản sao lưu đã thay đổi; chưa ghi dữ liệu game: ' + rel)
-            name = Path(rel).name
-            if name not in chunks:
-                raise FormatError('Không xác định được tên chunk gốc để khôi phục: ' + name)
-            # Verify original physical identity, not just a matching file size.
-            check = Archive(ar.root, ar.manifest_path, {name: source})
-            check.chunk_bytes(chunks[name])
-            restored[rel] = source
+
+            target_sha = sha(target)
+            if target_sha == orig_hash:
+                # File is already clean on disk (e.g. STOVE verified and restored it). No restore needed!
+                continue
+            elif target_sha == patched_hash:
+                name = Path(rel).name
+                if name not in chunks:
+                    raise FormatError('Không xác định được tên chunk gốc để khôi phục: ' + name)
+                # Verify original physical identity, not just a matching file size.
+                check = Archive(ar.root, ar.manifest_path, {name: source})
+                check.chunk_bytes(chunks[name])
+                restored[rel] = source
+            else:
+                raise RuntimeError('Chunk cũ hoặc bản sao lưu đã thay đổi; chưa ghi dữ liệu game: ' + rel)
         return restored
 
     def _transaction(self, files, new_state, expected_previous=None, expected_sources=None):
