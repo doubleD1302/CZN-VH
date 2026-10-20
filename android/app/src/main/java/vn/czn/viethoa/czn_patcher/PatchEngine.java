@@ -11,7 +11,7 @@ import java.util.zip.*;
 
 /** Streaming staging, verified backups, atomic file replacement and durable rollback journal. */
 public final class PatchEngine {
-    public static final int CURRENT_PATCHER_CODE = 10801;
+    public static final int CURRENT_PATCHER_CODE = 10802;
     public interface Progress { void report(String label,int percent); }
     public interface CommitHook { void before(int index,String path)throws Exception; }
     private final byte[] key;public CommitHook hook=(i,p)->{};
