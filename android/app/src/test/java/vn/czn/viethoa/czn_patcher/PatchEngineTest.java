@@ -232,6 +232,39 @@ public class PatchEngineTest {
         }
     }
 
+    @Test public void diskSpaceDeduplicationAndBaselineMultiplierAreVerified()throws Exception{
+        JSONObject firstResult=engine().apply(root,new ByteArrayInputStream(zip),(s,n)->{});
+        assertTrue(firstResult.getBoolean("success"));
+        JSONObject state=new JSONObject(new String(PatchFormat.bytes(new File(root,".czn_viethoa/state.json"),262144),StandardCharsets.UTF_8));
+        File base=new File(root,".czn_viethoa/baselines/"+state.getString("baseline")+"/chunks/base_b21_0.ssrc");
+        assertTrue("Baseline backup phải tồn tại sau lần cài đầu",base.exists());
+        
+        // Tạo gói v1.4.1 kế thừa cùng baseline để kiểm tra hệ số 2x khi baseline đã tồn tại
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10400).put("version_code",10401).put("version","1.4.1");
+        JSONArray patches=new JSONArray();
+        byte[] srcText=PatchFormat.bytes(new File(root,".czn_viethoa/baselines/"+state.getString("baseline")+"/chunks/lang_ja_b01_0.ssrc"),1024);
+        byte[] srcStory=PatchFormat.bytes(base,1024);
+        byte[] slotText=Arrays.copyOfRange(srcText,8,24);
+        byte[] slotStory=Arrays.copyOfRange(srcStory,8,24);
+        byte[] data0=utf("VIET_UPDATED_0"),data1=utf("VIET_UPDATED_1");
+        patches.put(new JSONObject().put("file","text/ja/text.db").put("payload","payload/text.zst").put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slotText))).put("source_xxh64",Long.toHexString(123)).put("target_cs",data0.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data0))).put("target_xxh64","abcd"));
+        patches.put(new JSONObject().put("file",PatchFormat.STORY).put("payload","payload/story.zst").put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slotStory))).put("source_xxh64",Long.toHexString(124)).put("target_cs",data1.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data1))).put("target_xxh64","abcd"));
+        desc.put("patches",patches);
+        byte[] raw=utf(desc.toString());Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/text.zst"));z.write(data0);z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/story.zst"));z.write(data1);z.closeEntry();
+        }
+        JSONObject updateResult=engine().apply(root,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+        assertTrue(updateResult.getBoolean("success"));
+        assertEquals("1.4.1",updateResult.getString("version"));
+        assertEquals(5,engine().restore(root,(stg,n)->{}).getInt("restored_count"));
+        assertEquals(original,hashes());
+    }
+
     @Test public void realNativeReadbackFixture()throws Exception{
         String baseline=System.getenv("CZN_TEST_BASELINE"),bundle=System.getenv("CZN_TEST_BUNDLE"),output=System.getenv("CZN_TEST_OUTPUT");Assume.assumeNotNull(baseline,bundle,output);File testRoot=new File(output);assertFalse("Do not overwrite previous evidence",testRoot.exists());testRoot.mkdirs();for(String rel:PatchFormat.ALLOWED){File f=new File(baseline,rel);if(f.exists()){File t=PatchFormat.safe(testRoot,rel);t.getParentFile().mkdirs();Files.copy(f.toPath(),t.toPath());}}PatchEngine real=new PatchEngine(Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));try(InputStream in=new FileInputStream(bundle)){assertTrue(real.apply(testRoot,in,(s,n)->{}).getBoolean("success"));}System.out.println("Native verification output: "+testRoot);
     }
