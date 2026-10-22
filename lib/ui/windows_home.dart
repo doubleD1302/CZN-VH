@@ -12,6 +12,7 @@ import '../services/notice_policy.dart';
 import 'companion_dialog.dart';
 import 'czn_companion.dart';
 import 'czn_landing.dart';
+import 'donate_screen.dart';
 import 'czn_tools_backdrop.dart';
 import 'czn_tools_design.dart';
 import 'czn_tools_preferences.dart';
@@ -272,7 +273,8 @@ class _WindowsHomeState extends State<WindowsHome> with WidgetsBindingObserver {
     }
     if (installed) {
       if (hasTranslationUpdate) {
-        if (hasDownloadUpdate && !await perform('translation', download: true)) {
+        if (hasDownloadUpdate &&
+            !await perform('translation', download: true)) {
           return;
         }
         await perform('install');
@@ -925,6 +927,13 @@ class _WindowsHomeState extends State<WindowsHome> with WidgetsBindingObserver {
             onSetup: busy ? null : () => _openTools(0),
             onUpdates: busy ? null : () => _openTools(1),
             onHelp: _showHelpDialog,
+            onDonate: busy
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const DonateScreen(),
+                    ),
+                  ),
             onSettings: busy ? null : () => _openTools(3),
             onNotice: busy ? null : () => _openTools(2),
           ),

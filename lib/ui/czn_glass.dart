@@ -76,6 +76,108 @@ class CznGlassPrimary extends StatelessWidget {
   );
 }
 
+/// A main home action below installation, using the launcher's gold frame.
+class CznDonateButton extends StatelessWidget {
+  const CznDonateButton({
+    super.key,
+    required this.onPressed,
+    this.compact = false,
+    this.width,
+  });
+  final VoidCallback? onPressed;
+  final bool compact;
+  final double? width;
+
+  static const double minContentWidth = 148.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final visualHeight = compact ? 24.0 : 28.0;
+    final touchHeight = compact ? 44.0 : 48.0;
+    final targetWidth = width != null
+        ? (width! < minContentWidth ? minContentWidth : width!)
+        : minContentWidth;
+
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: 'Ủng hộ dự án',
+      onTap: onPressed,
+      excludeSemantics: true,
+      child: Opacity(
+        opacity: onPressed == null ? .6 : 1,
+        child: SizedBox(
+          width: targetWidth,
+          height: touchHeight,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(visualHeight / 2),
+              child: Center(
+                child: Container(
+                  key: const Key('donate-visual-pill'),
+                  width: targetWidth,
+                  height: visualHeight,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xF0452632), Color(0xF01C1D2B)],
+                    ),
+                    border: Border.all(
+                      color: const Color(0xCCBD9568),
+                      width: 1.0,
+                    ),
+                    borderRadius: BorderRadius.circular(visualHeight / 2),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: compact ? 10.0 : 12.0,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.favorite_border,
+                          color: glassIvory,
+                          size: compact ? 12.0 : 14.0,
+                        ),
+                        SizedBox(width: compact ? 5.0 : 6.0),
+                        Flexible(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'ỦNG HỘ DỰ ÁN',
+                              style: TextStyle(
+                                fontFamily: 'CznSerif',
+                                color: glassIvory,
+                                fontSize: compact ? 10.5 : 12.0,
+                                letterSpacing: .4,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: compact ? 4.0 : 5.0),
+                        Icon(
+                          Icons.chevron_right,
+                          color: glassIvory,
+                          size: compact ? 12.0 : 14.0,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class CznGlassUtility extends StatelessWidget {
   const CznGlassUtility({
     super.key,

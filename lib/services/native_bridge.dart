@@ -77,4 +77,10 @@ class NativeBridge {
 
   static Future<bool> openDevSettings() async =>
       await channel.invokeMethod<bool>('openDevSettings') ?? false;
+
+  static Future<bool> startNotificationPairing() async =>
+      await channel.invokeMethod<bool>('startNotificationPairing') ?? false;
+
+  static Future<bool> stopNotificationPairing() async =>
+      await channel.invokeMethod<bool>('stopNotificationPairing') ?? false;
 }

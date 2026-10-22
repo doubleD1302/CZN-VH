@@ -38,13 +38,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
     super.initState();
     _connectPortController.addListener(_onPortChanged);
     _pairingPortController.addListener(_onPortChanged);
-    NativeBridge.getWifiIp().then((ip) {
-      if (mounted && ip != null && ip.trim().isNotEmpty) {
-        setState(() {
-          _hostController.text = ip.trim();
-        });
-      }
-    });
+    _hostController.text = '127.0.0.1';
   }
 
   void _onPortChanged() {
@@ -53,6 +47,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
 
   @override
   void dispose() {
+    NativeBridge.stopNotificationPairing();
     _connectPortController.removeListener(_onPortChanged);
     _pairingPortController.removeListener(_onPortChanged);
     _hostController.dispose();
@@ -77,6 +72,26 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
           content: Text('Vui lòng mở Cài đặt máy -> Tùy chọn nhà phát triển.'),
         ),
       );
+    }
+  }
+
+  Future<void> _startNotificationPairing() async {
+    final ok = await NativeBridge.startNotificationPairing();
+    if (ok) {
+      await NativeBridge.openDevSettings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF1E3A2F),
+            duration: Duration(seconds: 8),
+            content: Text(
+              '🔔 ĐÃ BẬT THÔNG BÁO GHÉP NỐI!\n'
+              '1. Bấm "Ghép nối thiết bị bằng mã ghép nối" trong Cài đặt.\n'
+              '2. Vuốt thanh thông báo xuống ➔ Nhập mã 6 số ➔ Bấm Gửi.',
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -268,6 +283,66 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
               Expanded(
                 child: ListView(
                   children: [
+                    // Auto-Pairing via Notification Banner Card
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF281C3D), Color(0xFF1B2A4A)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE8C170), width: 1.2),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.notifications_active, color: Color(0xFFE8C170), size: 18),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'GHÉP NỐI QUA THANH THÔNG BÁO',
+                                  style: TextStyle(
+                                    color: Color(0xFFFAF7EE),
+                                    fontFamily: 'CznDisplay',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            '🌟 Khuyên dùng cho OPPO / Xiaomi / Realme:\n'
+                            '• Tự động dò tìm cổng ghép nối qua mDNS.\n'
+                            '• Nhập mã 6 số ngay trên thanh thông báo, không lo bị tắt pop-up Cài đặt!',
+                            style: TextStyle(color: Color(0xFFD1D5DB), fontSize: 11, height: 1.35),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFE8C170),
+                                foregroundColor: const Color(0xFF161526),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: _startNotificationPairing,
+                              icon: const Icon(Icons.flash_on, size: 18),
+                              label: const Text(
+                                'Bật Ghép nối qua Thông báo',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     // Step 1: Open settings button
                     OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
@@ -386,7 +461,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
                                 SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
-                                    'Mẹo quan trọng (Xiaomi / HyperOS / Samsung):\n'
+                                    'Mẹo quan trọng khi nhập thủ công:\n'
                                     'Khi chuyển đổi app, Android sẽ tự động đóng pop-up mã 6 số khiến cổng bị tắt! Hãy mở app CZN ở dạng "Cửa sổ nổi" (Floating Window) hoặc "Chia đôi màn hình" để hộp thoại mã trên Cài đặt luôn hiển thị khi nhập.',
                                     style: TextStyle(color: Color(0xFFA7F3D0), fontSize: 11, height: 1.35),
                                   ),
@@ -394,9 +469,79 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
                               ],
                             ),
                           ),
+
+                          // OPPO / Realme specific tip
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF261919),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFE06C75)),
+                            ),
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Color(0xFFE06C75), size: 16),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Lưu ý riêng cho máy OPPO / Realme (ColorOS):',
+                                      style: TextStyle(color: Color(0xFFE06C75), fontWeight: FontWeight.bold, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  '• Trong Cài đặt nhà phát triển: Bật "Tắt giám sát quyền" (hoặc Tắt tối ưu hóa hệ thống).\n'
+                                  '• Bật cả 2 công tắc: "Gỡ lỗi qua USB" và "Gỡ lỗi không dây".\n'
+                                  '• Khóa app CZN trong màn hình Đa nhiệm (icon ổ khóa) để ColorOS không kill socket.\n'
+                                  '• Nếu báo lỗi kết nối dù đã ghép nối: Bấm "Thu hồi ủy quyền gỡ lỗi USB" rồi thử lại.',
+                                  style: TextStyle(color: Color(0xFFF0B0B0), fontSize: 10.5, height: 1.3),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Xiaomi specific tip
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF221F14),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFD19A66)),
+                            ),
+                            child: const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.info_outline, color: Color(0xFFD19A66), size: 16),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Lưu ý riêng cho máy XIAOMI (MIUI / HyperOS):',
+                                      style: TextStyle(color: Color(0xFFD19A66), fontWeight: FontWeight.bold, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                                SizedBox(height: 3),
+                                Text(
+                                  '• Trong Cài đặt nhà phát triển: Bật "Cài đặt qua USB" và "Gỡ lỗi USB (Cài đặt bảo mật)".\n'
+                                  '• Khi chuyển app pop-up mã 6 số sẽ bị đóng ➔ Hãy dùng nút "Ghép nối qua Thông báo" ở trên.',
+                                  style: TextStyle(color: Color(0xFFE5C07B), fontSize: 10.5, height: 1.3),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 10),
+
                     // Host / IP Address Field
                     TextField(
                       controller: _hostController,
@@ -405,7 +550,7 @@ class _LocalAdbDialogState extends State<LocalAdbDialog> {
                       decoration: InputDecoration(
                         labelText: 'Địa chỉ IP thiết bị (Host)',
                         labelStyle: const TextStyle(color: Color(0xFFE8C170)),
-                        helperText: 'Tự nhận diện theo Wi-Fi (ví dụ: 192.168.3.105 hoặc 127.0.0.1)',
+                        helperText: 'Mặc định 127.0.0.1 loopback nội bộ (chống bị chặn trên OPPO/Xiaomi)',
                         helperStyle: const TextStyle(color: Color(0xFF8E88AB), fontSize: 10.5),
                         hintText: '127.0.0.1',
                         hintStyle: const TextStyle(color: Color(0xFF6B6584)),

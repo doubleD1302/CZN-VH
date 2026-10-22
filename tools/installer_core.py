@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 import time
 import uuid
@@ -93,13 +94,13 @@ def contained(root, relative):
     return target
 
 
+ALLOWED_BASE_CHUNKS = {f'chunks/base_b{i:02d}_0.ssrc' for i in range(1, 64)}
+
+
 def allowed_resource(relative):
     p = Path(relative)
     return relative in (
-        'manifest.ssra', *IDENTITY_FILES,
-        'chunks/base_b21_0.ssrc', 'chunks/base_b17_0.ssrc', 'chunks/base_b22_0.ssrc',
-        'chunks/base_b29_0.ssrc', 'chunks/base_b30_0.ssrc',
-        'chunks/base_b31_0.ssrc', 'chunks/base_b32_0.ssrc', 'chunks/base_b01_0.ssrc'
+        'manifest.ssra', *IDENTITY_FILES, *ALLOWED_BASE_CHUNKS
     ) or (
         len(p.parts) == 2 and p.parts[0] == 'chunks' and p.name.startswith('lang_ja_') and p.suffix == '.ssrc'
     )
@@ -362,7 +363,106 @@ class Installer:
         self.log(f'Sẵn sàng {len(accepted):,}/{db.rows:,} mục; {len(issues):,} mục cần kiểm tra. Báo cáo: data/reports.')
         return ar, db, accepted, report
 
+    def build_slots(self, descriptor, payloads_dir):
+        self.log('Phát hiện gói 29 slots; đang nạp toàn bộ cốt truyện và giao diện...')
+        ar, _ = self.original_archive()
+        build = self.data / 'builds' / ('slots-' + uuid.uuid4().hex[:12])
+        chunks_out = build / 'chunks'
+        chunks_out.mkdir(parents=True, exist_ok=True)
+
+        manifest_data = bytearray(ar.data)
+        chunk_buffers = {}
+        applied_count = 0
+        patches = descriptor.get('patches', [])
+
+        for p in patches:
+            fname = p['file']
+            chunk_name = p.get('chunk')
+            is_optional = p.get('optional', False)
+
+            if fname not in ar.files:
+                if is_optional:
+                    continue
+                raise FormatError(f'Tệp kịch bản không tồn tại trong manifest: {fname}')
+
+            f = ar.files[fname]
+            segs = ar.segments(f)
+            if not segs:
+                if is_optional:
+                    continue
+                raise FormatError(f'Không tìm thấy segment cho: {fname}')
+
+            c, off, size = segs[0]
+            rel_chunk = f'chunks/{c["name"]}'
+            live_chunk_file = self.resources / rel_chunk
+            if not live_chunk_file.is_file():
+                if fname != 'text/ja/text.db' or is_optional:
+                    continue
+                raise FileNotFoundError(f'Thiếu chunk bắt buộc trong game: {rel_chunk}')
+
+            pl_name = Path(p['payload']).name
+            pl_file = payloads_dir / pl_name
+            if not pl_file.is_file():
+                if is_optional:
+                    continue
+                raise FileNotFoundError(f'Thiếu payload: {pl_name}')
+
+            pl_bytes = pl_file.read_bytes()
+            if len(pl_bytes) > size:
+                raise FormatError(f'Payload {pl_name} vượt kích thước slot {size}')
+
+            if c['name'] not in chunk_buffers:
+                chunk_buffers[c['name']] = bytearray(live_chunk_file.read_bytes())
+
+            buf = chunk_buffers[c['name']]
+            buf[off : off + len(pl_bytes)] = pl_bytes
+            buf[off + len(pl_bytes) : off + size] = b'\x00' * (size - len(pl_bytes))
+
+            struct.pack_into('<II', manifest_data, f['entry'] + 16, len(pl_bytes), p['target_us'])
+            manifest_data[f['entry'] + 32] = 1
+            struct.pack_into('<Q', manifest_data, ar.fhash + f['index'] * 8, int(p['target_xxh64'], 16))
+            applied_count += 1
+
+        for cname, buf in chunk_buffers.items():
+            chunk_info = next(c for c in ar.chunks if c['name'] == cname)
+            checksum = xxhash.xxh64_intdigest(memoryview(buf)[:-16])
+            struct.pack_into('<Q', buf, len(buf) - 8, checksum)
+            struct.pack_into('<Q', manifest_data, ar.chunk_table + chunk_info['index'] * 32 + 24, checksum)
+            (chunks_out / cname).write_bytes(buf)
+
+        (build / 'manifest.ssra').write_bytes(manifest_data)
+
+        for rel in IDENTITY_FILES:
+            source = self.resources / rel
+            if not source.exists():
+                continue
+            if rel.endswith('.etag'):
+                original = manifest_identity(source.read_bytes(), ar.data)
+                patched = manifest_identity(source.read_bytes(), bytes(manifest_data))
+            else:
+                original, patched = ar.data, bytes(manifest_data)
+            atomic_bytes(build / 'original_metadata' / rel, original)
+            atomic_bytes(build / rel, patched)
+
+        report = {
+            'schema': 1,
+            'slots_mode': True,
+            'applied_slots': applied_count,
+            'total_slots': len(patches),
+            'touched_chunks': sorted(chunk_buffers.keys()),
+            'translated': applied_count,
+            'manifest_sha256': hashlib.sha256(manifest_data).hexdigest(),
+            'identity_synced': (build / IDENTITY_FILES[0]).exists()
+        }
+        write_json(build / 'build.json', report)
+        self.log(f'Đã nạp thành công {applied_count}/{len(patches)} slots dữ liệu game.')
+        return ar, build, report
+
     def build(self):
+        desc_file = self.data / 'release.descriptor.json'
+        payloads_dir = self.data / 'payload'
+        if desc_file.is_file() and payloads_dir.is_dir():
+            return self.build_slots(read_json(desc_file), payloads_dir)
         ar, db, accepted, report = self.sync()
         if not accepted:
             raise ValueError('Chưa có bản dịch hợp lệ để cài.')
@@ -400,7 +500,8 @@ class Installer:
         if messenger_payload is not None:
             overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
             combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
-            messenger_report['archive_patch'] = combined.patch_story_file(MESSENGER_STORY_FILE, messenger_payload, build)
+            messenger_file = messenger_report.get('file', MESSENGER_STORY_FILE)
+            messenger_report['archive_patch'] = combined.patch_story_file(messenger_file, messenger_payload, build)
             stats['chunks'] = sorted({*stats['chunks'], *messenger_report['archive_patch']['chunks']})
             self.log(f'Tin nhắn Messenger: {messenger_report["translated"]}/{messenger_report["total"]} mục; chỉ đổi trường text_ja.')
 
@@ -409,7 +510,8 @@ class Installer:
         if visit_payload is not None:
             overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
             combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
-            visit_report['archive_patch'] = combined.patch_story_file(VISIT_STORY_FILE, visit_payload, build)
+            visit_file = visit_report.get('file', VISIT_STORY_FILE)
+            visit_report['archive_patch'] = combined.patch_story_file(visit_file, visit_payload, build)
             stats['chunks'] = sorted({*stats['chunks'], *visit_report['archive_patch']['chunks']})
             self.log(f'Thăm thị trấn: {visit_report["translated"]}/{visit_report["total"]} mục; chỉ đổi trường text_ja.')
 
@@ -418,7 +520,8 @@ class Installer:
         if friendship_payload is not None:
             overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
             combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
-            friendship_report['archive_patch'] = combined.patch_story_file(FRIENDSHIP_STORY_FILE, friendship_payload, build)
+            friendship_file = friendship_report.get('file', FRIENDSHIP_STORY_FILE)
+            friendship_report['archive_patch'] = combined.patch_story_file(friendship_file, friendship_payload, build)
             stats['chunks'] = sorted({*stats['chunks'], *friendship_report['archive_patch']['chunks']})
             self.log(f'Giao lưu & Tình bạn: {friendship_report["translated"]}/{friendship_report["total"]} mục; chỉ đổi trường text_ja.')
 
@@ -427,7 +530,8 @@ class Installer:
         if counseling_payload is not None:
             overrides = {p.name: p for p in (build / 'chunks').glob('*.ssrc')}
             combined = Archive(ar.root, build / 'manifest.ssra', ar.overrides | overrides)
-            counseling_report['archive_patch'] = combined.patch_story_file(COUNSELING_STORY_FILE, counseling_payload, build)
+            counseling_file = counseling_report.get('file', COUNSELING_STORY_FILE)
+            counseling_report['archive_patch'] = combined.patch_story_file(counseling_file, counseling_payload, build)
             stats['chunks'] = sorted({*stats['chunks'], *counseling_report['archive_patch']['chunks']})
             self.log(f'Tư vấn tâm lý: {counseling_report["translated"]}/{counseling_report["total"]} mục; chỉ đổi trường text_ja.')
         for rel in IDENTITY_FILES:
@@ -592,12 +696,12 @@ class Installer:
         # Check the installed archive independently, using only the game's current files.
         installed = Archive(self.resources)
         native = Database(installed.read_file('text/ja/text.db'), require_native_phase=True)
-        if native.rows != report['rows']:
+        if not report.get('slots_mode') and native.rows != report['rows']:
             raise RuntimeError('Số dòng sau cài không khớp.')
         for chunk in installed.chunks:
             if 'chunks/' + chunk['name'] in files:
                 installed.chunk_bytes(chunk)
-        if report.get('story', {}).get('translated'):
+        if not report.get('slots_mode') and report.get('story', {}).get('translated'):
             from story_format import StoryTable
             from story_localization import STORY_FILE, source_rows
             live_story = source_rows(StoryTable(installed.read_file(STORY_FILE)))
@@ -618,7 +722,7 @@ class Installer:
                 raise RuntimeError('Sub Story readback sau cài không khớp.')
             report['sub_story']['installed_readback_match'] = count
         self.log(f'Đã cài {report["translated"]:,} mục tiếng Việt. Chọn ngôn ngữ văn bản 日本語 trong game.')
-        if report['identity_synced']:
+        if report.get('identity_synced'):
             self.log('Đã đồng bộ dấu nhận diện manifest với bản vá; giữ nguyên URL và ETag của phiên bản trên máy chủ.')
         report['file_status'] = self.status()
         write_json(self.data / 'reports' / 'TRANG_THAI.json', report)

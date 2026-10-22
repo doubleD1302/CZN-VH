@@ -21,6 +21,14 @@
         </service>
         <provider android:name="rikka.shizuku.ShizukuProvider" android:authorities="${applicationId}.shizuku" android:multiprocess="false" android:enabled="true" android:exported="true" android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"/>
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.updates" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/update_paths"/></provider>
+        <receiver
+            android:name=".AdbPairingReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="vn.czn.viethoa.ACTION_PAIR_ADB" />
+                <action android:name="vn.czn.viethoa.ACTION_CANCEL_PAIR_ADB" />
+            </intent-filter>
+        </receiver>
         <meta-data android:name="flutterEmbedding" android:value="2"/>
     </application>
     <queries>

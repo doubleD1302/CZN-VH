@@ -18,6 +18,7 @@ import 'czn_tools_workflow.dart';
 import 'czn_tools_backdrop.dart';
 import 'czn_companion.dart';
 import 'czn_landing.dart';
+import 'donate_screen.dart';
 import 'companion_dialog.dart';
 import 'local_adb_dialog.dart';
 
@@ -438,15 +439,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showShizukuTroubleshoot() {
-    LocalAdbDialog.show(context, onConnected: () {
-      _refresh();
-    });
+    LocalAdbDialog.show(
+      context,
+      onConnected: () {
+        _refresh();
+      },
+    );
   }
 
   Future<void> _access() async {
-    LocalAdbDialog.show(context, onConnected: () {
-      _refresh();
-    });
+    LocalAdbDialog.show(
+      context,
+      onConnected: () {
+        _refresh();
+      },
+    );
   }
 
   Future<void> _run(
@@ -617,9 +624,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           return await NativeBridge.map('installPatch', {'path': path});
         } catch (e) {
           setState(() => _downloading = false);
-          if (_bundled != null) {
-            return await NativeBridge.map('installBundled');
-          }
+          // Keep the verified online target. An old bundled patch can require
+          // different JP data and must not mask a download/install failure.
           rethrow;
         }
       }
@@ -1027,6 +1033,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           onSetup: _busy ? null : () => _openTools(0),
           onUpdates: _busy ? null : () => _openTools(1),
           onHelp: _showToolsHelp,
+          onDonate: _busy || _checking
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const DonateScreen()),
+                ),
           onSettings: _busy || _checking ? null : _settings,
           onNotice: _busy ? null : () => _maybeNotice(force: true),
         ),
@@ -1202,7 +1213,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       CznToolsTab.settings => CznToolsSettingsPage(
         companionVisible: _showCompanion,
         autoDownload: _status['autoDownload'] != false,
-        channel: _status['channel'] as String? ?? 'https://github.com/doubleD1302/CZN-VH/releases/latest/download/channel.json',
+        channel: _status['channel'] as String? ?? 'https://github.com/doubleD1302/CZN-VH/releases/latest/download/localadb-channel.json',
         appVersion: appVersion,
         patchVersion: patchVersion,
         busy: _busy,

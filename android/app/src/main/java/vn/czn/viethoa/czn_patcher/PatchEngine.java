@@ -11,7 +11,7 @@ import java.util.zip.*;
 
 /** Streaming staging, verified backups, atomic file replacement and durable rollback journal. */
 public final class PatchEngine {
-    public static final int CURRENT_PATCHER_CODE = 10802;
+    public static final int CURRENT_PATCHER_CODE = 10904;
     public interface Progress { void report(String label,int percent); }
     public interface CommitHook { void before(int index,String path)throws Exception; }
     private final byte[] key;public CommitHook hook=(i,p)->{};
@@ -43,30 +43,40 @@ public final class PatchEngine {
     private static final Map<String, String> EXPECTED_CHUNKS = new HashMap<>();
     static {
         EXPECTED_CHUNKS.put("text/ja/text.db", "lang_ja_b01_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.STORY, "base_b21_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.SUB_STORY, "base_b17_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.MESSENGER, "base_b22_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.VISIT, "base_b31_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.FRIENDSHIP, "base_b31_0.ssrc");
-        EXPECTED_CHUNKS.put(PatchFormat.COUNSELING, "base_b01_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_main_part1_251203@story.db", "base_b13_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_main_part2_260708@story.db", "base_b13_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_etc_260909@story.db", "base_b12_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_1004_251022@story.db", "base_b06_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_1041_251224@story.db", "base_b23_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_1052_260225@story.db", "base_b12_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_1061_260408@story.db", "base_b09_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_1062_260729@story.db", "base_b19_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_trauma_code_30048_260708@story.db", "base_b22_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_main_part3_260729@story.db", "base_b14_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_main_part4_260930@story.db", "base_b17_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.STORY, "base_b03_0.ssrc");
+        EXPECTED_CHUNKS.put(PatchFormat.SUB_STORY, "base_b20_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_char_messenger_chat_261021@story.db", "base_b08_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_visit_261021@story.db", "base_b17_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_friendship_261021@story.db", "base_b23_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_counseling_261021@story.db", "base_b13_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part1_251203@story.db", "base_b22_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part2_260708@story.db", "base_b19_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part3_260729@story.db", "base_b02_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part4_260930@story.db", "base_b26_0.ssrc");
         EXPECTED_CHUNKS.put("db/story_main_part5_260909@story.db", "base_b02_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_sub_part1_260114@story.db", "base_b04_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_sub_part2_260708@story.db", "base_b14_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_sub_part3_260708@story.db", "base_b13_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_sub_part4_260729@story.db", "base_b29_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_sub_part5_260909@story.db", "base_b02_0.ssrc");
-        EXPECTED_CHUNKS.put("db/story_counseling_memoryerase@story.db", "base_b07_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_main_part6_261021@story.db", "base_b07_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part1_260114@story.db", "base_b19_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part2_260708@story.db", "base_b11_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part3_260708@story.db", "base_b25_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part4_260729@story.db", "base_b08_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part5_260909@story.db", "base_b08_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_sub_part6_261021@story.db", "base_b08_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_counseling_memoryerase@story.db", "base_b04_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_etc_261021@story.db", "base_b25_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_live_event_261021@story.db", "base_b02_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1004_251022@story.db", "base_b24_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1041_251224@story.db", "base_b02_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1052_260225@story.db", "base_b15_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1061_260408@story.db", "base_b09_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_1062_260729@story.db", "base_b22_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_30048_260708@story.db", "base_b01_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_trauma_code_30134_261021@story.db", "base_b10_0.ssrc");
+        // Backwards compatibility entries for older manifests / test fixtures
+        EXPECTED_CHUNKS.put("db/story_char_messenger_chat_260930@story.db", "base_b22_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_visit_260930@story.db", "base_b31_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_friendship_260930@story.db", "base_b31_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_counseling_260930@story.db", "base_b01_0.ssrc");
+        EXPECTED_CHUNKS.put("db/story_etc_260909@story.db", "base_b12_0.ssrc");
         EXPECTED_CHUNKS.put("db/story_live_event_260930@story.db", "base_b07_0.ssrc");
     }
     private static boolean isAllowedSlot(String f){
@@ -97,8 +107,9 @@ public final class PatchEngine {
                 progress.report("Kiểm tra nguồn Nhật trên thiết bị",25);PatchFormat manifest=new PatchFormat(PatchFormat.bytes(new File(sourceRoot,"manifest.ssra"),16777216));File stage=new File(work,"stage");Map<String,File> replacements=new LinkedHashMap<>();JSONArray patches=release.getJSONArray("patches");List<JSONObject> activePatches=new ArrayList<>();Set<String> processedChunks=new HashSet<>();String baseId=PatchFormat.sha(new File(sourceRoot,"manifest.ssra"));File base=new File(h,"baselines/"+baseId);long required=33554432L;
                 for(int i=0;i<patches.length();i++){
                     JSONObject p=patches.getJSONObject(i);String file=p.getString("file");PatchFormat.Entry f=manifest.files.get(file);if(f==null)throw new IOException("Thiếu slot JP: "+file);PatchFormat.Chunk c=manifest.chunk(f);
-                    String wanted=EXPECTED_CHUNKS.get(f.name);
-                    if(wanted==null)wanted="lang_ja_b01_0.ssrc";
+                    String wanted=p.optString("chunk");
+                    if(wanted.isEmpty())wanted=(c.name.equals("base_b21_0.ssrc")||c.name.equals("base_b17_0.ssrc"))?c.name:EXPECTED_CHUNKS.get(f.name);
+                    if(wanted==null)wanted=c.name;
                     if(!c.name.equals(wanted)||f.enc!=0||f.comp!=1||f.cs!=p.getInt("source_cs")||f.us!=p.getInt("source_us")||f.hash!=PatchFormat.hexLong(p.getString("source_xxh64")))throw new IOException("Nguồn JP đã đổi; cần bản dịch tương thích mới.");
                     File src=sourceFile(sourceRoot,root,"chunks/"+c.name);
                     boolean isOptional=!file.equals("text/ja/text.db")&&!file.equals(PatchFormat.STORY);

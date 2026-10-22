@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import rikka.shizuku.Shizuku
 import java.io.IOException
@@ -21,11 +22,15 @@ object ShizukuServiceConnector {
     class Failure(val code: String, message: String, val diagnostics: Map<String, Any?>) : IOException(message)
 
     private val main = Handler(Looper.getMainLooper())
-    private const val ATTEMPT_MS = 10_000L
+    // Shizuku 13.5.x permits 30s for UserService startup. Keep one
+    // shared window across callbacks/retries rather than two premature 10s waits.
+    private const val CONNECTION_MS = 35_000L
+    private const val CALLER_WAIT_MS = 40_000L
     private lateinit var args: Shizuku.UserServiceArgs
     private var configured = false
     private var appPackage = ""
     private var connectionStarted = 0L
+    private var connectionDeadline = 0L
     private var current: Attempt? = null
     private var sequence = 0L
     private var staleConnection: ServiceConnection? = null
@@ -68,7 +73,7 @@ object ShizukuServiceConnector {
         val result = CompletableFuture<ICznService>()
         main.post { request(result) }
         try {
-            return result.get(25, TimeUnit.SECONDS)
+            return result.get(CALLER_WAIT_MS, TimeUnit.MILLISECONDS)
         } catch (error: ExecutionException) {
             throw (error.cause ?: error)
         } catch (error: TimeoutException) {
@@ -140,6 +145,18 @@ object ShizukuServiceConnector {
             waiters.forEach { it.completeExceptionally(failure) }
             return
         }
+        if (number == 1) {
+            connectionStarted = System.currentTimeMillis()
+            connectionDeadline = SystemClock.elapsedRealtime() + CONNECTION_MS
+        }
+        val remaining = connectionDeadline - SystemClock.elapsedRealtime()
+        if (remaining <= 0L) {
+            diagnostic("SHIZUKU_BIND_TIMEOUT", number, "Đã hết thời gian khởi động dịch vụ vá (35s).")
+            ShizukuBootstrapLog.capture(appPackage, connectionStarted)
+            val failure = Failure("SHIZUKU_BIND_TIMEOUT", "Dịch vụ vá chưa khởi động được. Bấm kiểm tra lại và gửi báo cáo lỗi.", state)
+            waiters.forEach { it.completeExceptionally(failure) }
+            return
+        }
         val attempt = Attempt(++sequence, number, waiters, Shizuku.getBinder())
         attempt.connection = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -180,12 +197,11 @@ object ShizukuServiceConnector {
             }
         }
         attempt.timeout = Runnable {
-            fail(attempt, "SHIZUKU_BIND_TIMEOUT", "Dịch vụ vá chưa phản hồi trong 10s (lượt ${attempt.number}/2). Bấm kiểm tra lại và gửi báo cáo lỗi.", true)
+            fail(attempt, "SHIZUKU_BIND_TIMEOUT", "Dịch vụ vá chưa phản hồi sau thời gian khởi động 35s. Bấm kiểm tra lại và gửi báo cáo lỗi.", false)
         }
         current = attempt
-        if (number == 1) connectionStarted = System.currentTimeMillis()
         diagnostic("binding", number, null)
-        main.postDelayed(attempt.timeout, ATTEMPT_MS)
+        main.postDelayed(attempt.timeout, remaining)
         try {
             Shizuku.bindUserService(args, attempt.connection)
         } catch (error: Exception) {
@@ -201,7 +217,8 @@ object ShizukuServiceConnector {
         detach(attempt)
         diagnostic(code, attempt.number, message)
         // Detach clears the SDK's entire cache for this tag. Finish it before a new bind.
-        val canRetry = retry && attempt.number < 2 && waiters.any { !it.isDone } && try {
+        val canRetry = retry && attempt.number < 2 &&
+            SystemClock.elapsedRealtime() < connectionDeadline && waiters.any { !it.isDone } && try {
             Shizuku.pingBinder() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         } catch (_: Exception) { false }
         if (canRetry) {
@@ -232,7 +249,8 @@ object ShizukuServiceConnector {
         val event = mapOf("stage" to stage, "attempt" to attempt, "time" to System.currentTimeMillis(), "message" to message)
         history.addLast(event)
         while (history.size > 12) history.removeFirst()
-        state = event + ("events" to history.toList())
+        state = event + mapOf("events" to history.toList(), "connection_window_ms" to CONNECTION_MS,
+            "remaining_ms" to (connectionDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(0L))
         Log.i("CznShizuku", "stage=$stage attempt=$attempt ${message ?: ""}")
     }
 }

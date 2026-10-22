@@ -13,20 +13,20 @@ import net.jpountz.xxhash.*;
 public final class PatchFormat {
     public static final String STORY = "db/story_main_part1new_260729@story.db";
     public static final String SUB_STORY = "db/story_sub_part1new_260729@story.db";
-    public static final String MESSENGER = "db/story_char_messenger_chat_260930@story.db";
-    public static final String VISIT = "db/story_visit_260930@story.db";
-    public static final String FRIENDSHIP = "db/story_friendship_260930@story.db";
-    public static final String COUNSELING = "db/story_counseling_260930@story.db";
-    public static final Set<String> ALLOWED = new HashSet<>(Arrays.asList(
-        "manifest.ssra", "manifest.ssra.etag", "manifest.ssra.prev",
-        "chunks/lang_ja_b01_0.ssrc",
-        "chunks/base_b01_0.ssrc", "chunks/base_b02_0.ssrc", "chunks/base_b04_0.ssrc",
-        "chunks/base_b06_0.ssrc", "chunks/base_b07_0.ssrc", "chunks/base_b09_0.ssrc", "chunks/base_b12_0.ssrc",
-        "chunks/base_b13_0.ssrc", "chunks/base_b14_0.ssrc", "chunks/base_b17_0.ssrc",
-        "chunks/base_b19_0.ssrc", "chunks/base_b21_0.ssrc", "chunks/base_b22_0.ssrc",
-        "chunks/base_b23_0.ssrc", "chunks/base_b29_0.ssrc", "chunks/base_b30_0.ssrc",
-        "chunks/base_b31_0.ssrc", "chunks/base_b32_0.ssrc"
-    ));
+    public static final String MESSENGER = "db/story_char_messenger_chat_261021@story.db";
+    public static final String VISIT = "db/story_visit_261021@story.db";
+    public static final String FRIENDSHIP = "db/story_friendship_261021@story.db";
+    public static final String COUNSELING = "db/story_counseling_261021@story.db";
+    public static final Set<String> ALLOWED = new LinkedHashSet<>();
+    static {
+        ALLOWED.add("manifest.ssra");
+        ALLOWED.add("manifest.ssra.etag");
+        ALLOWED.add("manifest.ssra.prev");
+        ALLOWED.add("chunks/lang_ja_b01_0.ssrc");
+        for (int i = 0; i <= 63; i++) {
+            ALLOWED.add(String.format(Locale.ROOT, "chunks/base_b%02d_0.ssrc", i));
+        }
+    }
     public static String sha(File f) throws Exception { try(InputStream in = new FileInputStream(f)){return sha(in);} }
     public static String sha(InputStream in) throws Exception { MessageDigest d=MessageDigest.getInstance("SHA-256"); byte[] b=new byte[65536]; int n; while((n=in.read(b))!=-1) d.update(b,0,n); return hex(d.digest()); }
     public static String hex(byte[] b){StringBuilder s=new StringBuilder();for(byte v:b)s.append(String.format(Locale.ROOT,"%02x",v&255));return s.toString();}
@@ -54,7 +54,7 @@ public final class PatchFormat {
     private boolean tag(int p,String s){return p>=0&&p+4<=data.length&&new String(data,p,4,StandardCharsets.US_ASCII).equals(s);}
     public PatchFormat(byte[] input)throws Exception{
         data=input.clone();b=ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
-        if(data.length<88||!tag(0,"SSRA")||b.getInt(4)!=4||b.getInt(8)!=88)throw new IOException("Phiên bản tài nguyên chưa được hỗ trợ.");
+        if(data.length<88||!tag(0,"SSRA")||b.getInt(4)!=4||b.getInt(8)<1)throw new IOException("Phiên bản tài nguyên chưa được hỗ trợ.");
         int nc=b.getInt(12),nf=b.getInt(16);if(nc<1||nc>65535||nf<1||nf>2000000)throw new IOException("Chỉ mục không hợp lệ.");
         int so=pos(b.getLong(24)),ss=pos(b.getLong(32));co=pos(b.getLong(40));fo=pos(b.getLong(48));pos((long)co+nc*32L);pos((long)fo+nf*40L);int gp=pos((long)so+ss);if(!tag(gp,"GRPS"))throw new IOException("Thiếu nhóm SSRA.");
         int ng=b.getInt(gp+4),gs=b.getInt(gp+8);if(ng<1||ng>65535||gs<0)throw new IOException("Nhóm SSRA không hợp lệ.");int names=pos((long)gp+16+ng*24L);int end=pos((long)names+gs);Map<Integer,String> groups=new HashMap<>();

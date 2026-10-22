@@ -283,6 +283,11 @@ class Archive:
                     'Hãy mở game để tải đủ dữ liệu cập nhật, hoặc bấm Kiểm tra tệp tin trên STOVE.'
                 )
             data = p.read_bytes()
+            p_bak = Path(str(p) + '.bak')
+            if p_bak.exists():
+                h_test = xxhash.xxh64_intdigest(data[:-16]) if len(data) >= 16 else 0
+                if len(data) != chunk['total'] or h_test != chunk['checksum']:
+                    data = p_bak.read_bytes()
             if len(data) != chunk['total'] or chunk['total'] != chunk['size'] + 16:
                 raise FormatError('Kích thước chunk không khớp: ' + name)
             if data[-16:-8] != b'SSRC' + struct.pack('<I', chunk['id']):

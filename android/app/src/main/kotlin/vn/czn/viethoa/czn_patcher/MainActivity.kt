@@ -73,6 +73,23 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                 }
+                "startNotificationPairing" -> {
+                    try {
+                        AdbNotificationPairer.start(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("CZN_ADB", "startNotificationPairing error: ${e.message}", e)
+                        result.error("NOTIFICATION_PAIRING_FAILED", e.message, null)
+                    }
+                }
+                "stopNotificationPairing" -> {
+                    try {
+                        AdbNotificationPairer.stop(applicationContext)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("STOP_FAILED", e.message, null)
+                    }
+                }
                 "openDevSettings" -> {
                     try {
                         val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)
@@ -139,7 +156,7 @@ class MainActivity : FlutterActivity() {
                     } else result.error("PACKAGE", "Chọn bản CZN được hỗ trợ.", null)
                 }
                 "saveSettings" -> {
-                    val channel = call.argument<String>("channel") ?: ReleaseClient.DEFAULT_CHANNEL
+                    val channel = UpdateChannel.resolve(call.argument<String>("channel"), packageName == "vn.czn.viethoa.localadb")
                     try {
                         val u = java.net.URI(channel)
                         require(u.scheme == "https" && u.host != null && u.userInfo == null)
@@ -473,7 +490,7 @@ class MainActivity : FlutterActivity() {
             "autoDownload" to prefs.getBoolean("auto_download", true),
             "downloadedAppCode" to prefs.getInt("downloaded_app_code", 0),
             "downloadedPatchCode" to prefs.getInt("downloaded_patch_code", 0),
-            "channel" to prefs.getString("channel", ReleaseClient.DEFAULT_CHANNEL),
+            "channel" to ReleaseClient.configuredChannel(this),
             "appCode" to appCode(),
             "appVersion" to packageManager.getPackageInfo(packageName, 0).versionName,
             "android" to Build.VERSION.RELEASE,
@@ -530,6 +547,7 @@ class MainActivity : FlutterActivity() {
             downloadHandoffs.clear()
         }
         Shizuku.removeRequestPermissionResultListener(permissionListener)
+        AdbNotificationPairer.stop(applicationContext)
         super.onDestroy()
     }
 }
