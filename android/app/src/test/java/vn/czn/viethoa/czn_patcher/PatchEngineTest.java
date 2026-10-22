@@ -268,4 +268,197 @@ public class PatchEngineTest {
     @Test public void realNativeReadbackFixture()throws Exception{
         String baseline=System.getenv("CZN_TEST_BASELINE"),bundle=System.getenv("CZN_TEST_BUNDLE"),output=System.getenv("CZN_TEST_OUTPUT");Assume.assumeNotNull(baseline,bundle,output);File testRoot=new File(output);assertFalse("Do not overwrite previous evidence",testRoot.exists());testRoot.mkdirs();for(String rel:PatchFormat.ALLOWED){File f=new File(baseline,rel);if(f.exists()){File t=PatchFormat.safe(testRoot,rel);t.getParentFile().mkdirs();Files.copy(f.toPath(),t.toPath());}}PatchEngine real=new PatchEngine(Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));try(InputStream in=new FileInputStream(bundle)){assertTrue(real.apply(testRoot,in,(s,n)->{}).getBoolean("success"));}System.out.println("Native verification output: "+testRoot);
     }
+
+    @Test public void optionalSlotWithMismatchedMetadataIsSkippedWhenFileMissing()throws Exception{
+        File optRoot=Files.createTempDirectory("czn-android-opt-mismatch-").toFile();
+        String text="text/ja/text.db",story=PatchFormat.STORY,subStory=PatchFormat.SUB_STORY;
+        byte[] st=utf(text+"\0"+story+"\0"+subStory+"\0");
+        int so=304,gp=so+st.length,names=gp+64,fh=names+13;
+        ByteBuffer b=ByteBuffer.allocate(fh+40).order(ByteOrder.LITTLE_ENDIAN);
+        b.put(utf("SSRA")).putInt(4).putInt(88).putInt(3).putInt(3).putInt(0).putLong(so).putLong(st.length).putLong(88).putLong(184).putLong(0);
+        b.position(so);b.put(st);
+        b.position(gp);b.put(utf("GRPS")).putInt(2).putInt(13).putInt(0);
+        b.putShort(gp+16,(short)0);b.putInt(gp+20,0);b.putShort(gp+40,(short)12);b.putInt(gp+44,8);
+        putString(b,names,"lang_ja");putString(b,names+8,"base");
+        b.position(fh);b.put(utf("FHSH")).putInt(3).putInt(1).putInt(0);
+        JSONArray patches=new JSONArray();Map<String,byte[]> payloads=new LinkedHashMap<>();
+        String[] files=new String[]{text,story,subStory};
+        String[] chunks=new String[]{"lang_ja_b01_0.ssrc","base_b21_0.ssrc","base_b17_0.ssrc"};
+        int[] cids=new int[]{1,21,17};
+        int[] gids=new int[]{0,12,12};
+        String[] payloadNames=new String[]{"payload/text.zst","payload/story.zst","payload/sub_story.zst"};
+        int stOffset=0;
+        for(int i=0;i<3;i++){
+            byte[] src=utf("0123456789abcdef0123456789abcdef");
+            byte[] slot=Arrays.copyOfRange(src,8,24);
+            long h=PatchFormat.xx(src);
+            if(i<2){
+                ByteBuffer whole=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
+                whole.put(src).put(utf("SSRC")).putInt(cids[i]).putLong(h);
+                PatchFormat.write(PatchFormat.safe(optRoot,"chunks/"+chunks[i]),whole.array());
+            }
+            int c=88+i*32;
+            b.putInt(c,cids[i]).putShort(c+4,(short)gids[i]).putLong(c+8,32).putLong(c+16,48).putLong(c+24,h);
+            int f=184+i*40;
+            long offset=i==1?40:8;
+            int manifestCs = (i == 2) ? 20 : 16;
+            b.putLong(f+8,offset).putInt(f+16,manifestCs).putInt(f+20,24).putInt(f+28,stOffset).put(f+32,(byte)1).putShort(f+34,(short)gids[i]);
+            stOffset+=files[i].length()+1;
+            b.putLong(fh+16+i*8,123+i);
+            byte[] data=utf("VIET_OPT_"+i);
+            payloads.put(payloadNames[i],data);
+            patches.put(new JSONObject().put("file",files[i]).put("payload",payloadNames[i]).put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slot))).put("source_xxh64",Long.toHexString(123+i)).put("target_cs",data.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data))).put("target_xxh64","abcd"));
+        }
+        PatchFormat.write(new File(optRoot,"manifest.ssra"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.prev"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.etag"),utf("https://cdn.example/android\r\nserver-etag\r\n123\r\n321\r\n"));
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10400).put("version_code",10630).put("version","1.6.30").put("patches",patches);
+        byte[] raw=utf(desc.toString());
+        Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            for(Map.Entry<String,byte[]> e:payloads.entrySet()){
+                z.putNextEntry(new ZipEntry(e.getKey()));z.write(e.getValue());z.closeEntry();
+            }
+        }
+        JSONObject result=engine().apply(optRoot,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+        assertTrue(result.getBoolean("success"));
+        assertFalse(result.getBoolean("sub_story_applied"));
+        assertEquals("1.6.30",result.getString("version"));
+    }
+
+    @Test public void mismatchedMetadataThrowsDetailedDiagnosticExceptionWhenFileExists()throws Exception{
+        File optRoot=Files.createTempDirectory("czn-android-opt-diag-").toFile();
+        String text="text/ja/text.db",story=PatchFormat.STORY,subStory=PatchFormat.SUB_STORY;
+        byte[] st=utf(text+"\0"+story+"\0"+subStory+"\0");
+        int so=304,gp=so+st.length,names=gp+64,fh=names+13;
+        ByteBuffer b=ByteBuffer.allocate(fh+40).order(ByteOrder.LITTLE_ENDIAN);
+        b.put(utf("SSRA")).putInt(4).putInt(88).putInt(3).putInt(3).putInt(0).putLong(so).putLong(st.length).putLong(88).putLong(184).putLong(0);
+        b.position(so);b.put(st);
+        b.position(gp);b.put(utf("GRPS")).putInt(2).putInt(13).putInt(0);
+        b.putShort(gp+16,(short)0);b.putInt(gp+20,0);b.putShort(gp+40,(short)12);b.putInt(gp+44,8);
+        putString(b,names,"lang_ja");putString(b,names+8,"base");
+        b.position(fh);b.put(utf("FHSH")).putInt(3).putInt(1).putInt(0);
+        JSONArray patches=new JSONArray();Map<String,byte[]> payloads=new LinkedHashMap<>();
+        String[] files=new String[]{text,story,subStory};
+        String[] chunks=new String[]{"lang_ja_b01_0.ssrc","base_b21_0.ssrc","base_b17_0.ssrc"};
+        int[] cids=new int[]{1,21,17};
+        int[] gids=new int[]{0,12,12};
+        String[] payloadNames=new String[]{"payload/text.zst","payload/story.zst","payload/sub_story.zst"};
+        int stOffset=0;
+        for(int i=0;i<3;i++){
+            byte[] src=utf("0123456789abcdef0123456789abcdef");
+            byte[] slot=Arrays.copyOfRange(src,8,24);
+            long h=PatchFormat.xx(src);
+            ByteBuffer whole=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
+            whole.put(src).put(utf("SSRC")).putInt(cids[i]).putLong(h);
+            PatchFormat.write(PatchFormat.safe(optRoot,"chunks/"+chunks[i]),whole.array());
+            int c=88+i*32;
+            b.putInt(c,cids[i]).putShort(c+4,(short)gids[i]).putLong(c+8,32).putLong(c+16,48).putLong(c+24,h);
+            int f=184+i*40;
+            long offset=i==1?40:8;
+            int manifestCs = (i == 0) ? 20 : 16;
+            b.putLong(f+8,offset).putInt(f+16,manifestCs).putInt(f+20,24).putInt(f+28,stOffset).put(f+32,(byte)1).putShort(f+34,(short)gids[i]);
+            stOffset+=files[i].length()+1;
+            b.putLong(fh+16+i*8,123+i);
+            byte[] data=utf("VIET_OPT_"+i);
+            payloads.put(payloadNames[i],data);
+            patches.put(new JSONObject().put("file",files[i]).put("payload",payloadNames[i]).put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slot))).put("source_xxh64",Long.toHexString(123+i)).put("target_cs",data.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data))).put("target_xxh64","abcd"));
+        }
+        PatchFormat.write(new File(optRoot,"manifest.ssra"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.prev"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.etag"),utf("https://cdn.example/android\r\nserver-etag\r\n123\r\n321\r\n"));
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10400).put("version_code",10630).put("version","1.6.30").put("patches",patches);
+        byte[] raw=utf(desc.toString());
+        Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            for(Map.Entry<String,byte[]> e:payloads.entrySet()){
+                z.putNextEntry(new ZipEntry(e.getKey()));z.write(e.getValue());z.closeEntry();
+            }
+        }
+        try{
+            engine().apply(optRoot,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+            fail("Phải ném ngoại lệ khi chunk của required slot tồn tại nhưng metadata bị lệch");
+        }catch(IOException e){
+            assertTrue(e.getMessage().contains("Nguồn JP đã đổi; cần bản dịch tương thích mới."));
+            assertTrue(e.getMessage().contains(text));
+            assertTrue(e.getMessage().contains("lang_ja_b01_0.ssrc"));
+            assertTrue(e.getMessage().contains("cs: 20!=16"));
+            assertTrue(e.getMessage().contains("sourceRoot: live"));
+        }
+    }
+
+    @Test public void mismatchedMetadataOnOptionalSlotIsSkippedGracefully()throws Exception{
+        File optRoot=Files.createTempDirectory("czn-android-opt-skip-").toFile();
+        String text="text/ja/text.db",story=PatchFormat.STORY,subStory=PatchFormat.SUB_STORY;
+        byte[] st=utf(text+"\0"+story+"\0"+subStory+"\0");
+        int so=304,gp=so+st.length,names=gp+64,fh=names+13;
+        ByteBuffer b=ByteBuffer.allocate(fh+40).order(ByteOrder.LITTLE_ENDIAN);
+        b.put(utf("SSRA")).putInt(4).putInt(88).putInt(3).putInt(3).putInt(0).putLong(so).putLong(st.length).putLong(88).putLong(184).putLong(0);
+        b.position(so);b.put(st);
+        b.position(gp);b.put(utf("GRPS")).putInt(2).putInt(13).putInt(0);
+        b.putShort(gp+16,(short)0);b.putInt(gp+20,0);b.putShort(gp+40,(short)12);b.putInt(gp+44,8);
+        putString(b,names,"lang_ja");putString(b,names+8,"base");
+        b.position(fh);b.put(utf("FHSH")).putInt(3).putInt(1).putInt(0);
+        JSONArray patches=new JSONArray();Map<String,byte[]> payloads=new LinkedHashMap<>();
+        String[] files=new String[]{text,story,subStory};
+        String[] chunks=new String[]{"lang_ja_b01_0.ssrc","base_b21_0.ssrc","base_b17_0.ssrc"};
+        int[] cids=new int[]{1,21,17};
+        int[] gids=new int[]{0,12,12};
+        String[] payloadNames=new String[]{"payload/text.zst","payload/story.zst","payload/sub_story.zst"};
+        int stOffset=0;
+        for(int i=0;i<3;i++){
+            byte[] src=utf("0123456789abcdef0123456789abcdef");
+            byte[] slot=Arrays.copyOfRange(src,8,24);
+            long h=PatchFormat.xx(src);
+            ByteBuffer whole=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);
+            whole.put(src).put(utf("SSRC")).putInt(cids[i]).putLong(h);
+            PatchFormat.write(PatchFormat.safe(optRoot,"chunks/"+chunks[i]),whole.array());
+            int c=88+i*32;
+            b.putInt(c,cids[i]).putShort(c+4,(short)gids[i]).putLong(c+8,32).putLong(c+16,48).putLong(c+24,h);
+            int f=184+i*40;
+            long offset=i==1?40:8;
+            int manifestCs = (i == 2) ? 20 : 16;
+            b.putLong(f+8,offset).putInt(f+16,manifestCs).putInt(f+20,24).putInt(f+28,stOffset).put(f+32,(byte)1).putShort(f+34,(short)gids[i]);
+            stOffset+=files[i].length()+1;
+            b.putLong(fh+16+i*8,123+i);
+            byte[] data=utf("VIET_OPT_"+i);
+            payloads.put(payloadNames[i],data);
+            patches.put(new JSONObject().put("file",files[i]).put("payload",payloadNames[i]).put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slot))).put("source_xxh64",Long.toHexString(123+i)).put("target_cs",data.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data))).put("target_xxh64","abcd"));
+        }
+        PatchFormat.write(new File(optRoot,"manifest.ssra"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.prev"),b.array());
+        PatchFormat.write(new File(optRoot,"manifest.ssra.etag"),utf("https://cdn.example/android\r\nserver-etag\r\n123\r\n321\r\n"));
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10400).put("version_code",10630).put("version","1.6.30").put("patches",patches);
+        byte[] raw=utf(desc.toString());
+        Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            for(Map.Entry<String,byte[]> e:payloads.entrySet()){
+                z.putNextEntry(new ZipEntry(e.getKey()));z.write(e.getValue());z.closeEntry();
+            }
+        }
+        JSONObject res=engine().apply(optRoot,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+        assertTrue(res.getBoolean("success"));
+        assertFalse(res.getBoolean("sub_story_applied"));
+    }
+
+    @Test public void leftoverPatchedChunkIsRestoredFromBaselineOnPublisherUpdate()throws Exception{
+        assertTrue(engine().apply(root,new ByteArrayInputStream(zip),(s,n)->{}).getBoolean("success"));
+        JSONObject state=new JSONObject(new String(PatchFormat.bytes(new File(root,".czn_viethoa/state.json"),262144),StandardCharsets.UTF_8));
+        File baseManifest=new File(root,".czn_viethoa/baselines/"+state.getString("baseline")+"/manifest.ssra");
+        byte[] manifest=PatchFormat.bytes(baseManifest,1024);
+        manifest[20]=(byte)(manifest[20]^1);
+        PatchFormat.write(new File(root,"manifest.ssra"),manifest);
+        PatchFormat.write(new File(root,"manifest.ssra.prev"),manifest);
+        JSONObject res=engine().apply(root,new ByteArrayInputStream(zip),(s,n)->{});
+        assertTrue(res.getBoolean("success"));
+    }
 }

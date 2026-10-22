@@ -91,7 +91,15 @@ public final class PatchEngine {
                 if(intact){sourceRoot=baseline(root,prior);requireHashes(sourceRoot,prior.getJSONObject("original"));}
                 else {
                     if(hash(new File(root,"manifest.ssra")).equals(installed.getString("manifest.ssra")))throw new IOException("Bộ dữ liệu đang cài không nhất quán; hoàn tất kiểm tra game trước.");
-                    for(String rel:PatchFormat.keys(installed))if(rel.startsWith("chunks/")&&hash(PatchFormat.safe(root,rel)).equals(installed.getString(rel)))throw new IOException("Game cập nhật còn giữ chunk của bản vá cũ; hãy dùng kiểm tra/tải lại dữ liệu trong game trước.");
+                    File baseDir=baseline(root,prior);JSONObject originals=prior.optJSONObject("original");
+                    for(String rel:PatchFormat.keys(installed))if(rel.startsWith("chunks/")&&hash(PatchFormat.safe(root,rel)).equals(installed.getString(rel))){
+                        File cleanBack=PatchFormat.safe(baseDir,rel);String origHash=originals!=null?originals.optString(rel,null):null;
+                        if(cleanBack.exists()&&origHash!=null&&hash(cleanBack).equals(origHash)){
+                            copyFile(cleanBack,PatchFormat.safe(root,rel));
+                        }else{
+                            throw new IOException("Game cập nhật còn giữ chunk của bản vá cũ; hãy dùng kiểm tra/tải lại dữ liệu trong game trước.");
+                        }
+                    }
                     // A complete publisher update starts a new source baseline; old backups stay intact.
                     sourceRoot=root;
                 }
@@ -106,16 +114,32 @@ public final class PatchEngine {
                 }
                 progress.report("Kiểm tra nguồn Nhật trên thiết bị",25);PatchFormat manifest=new PatchFormat(PatchFormat.bytes(new File(sourceRoot,"manifest.ssra"),16777216));File stage=new File(work,"stage");Map<String,File> replacements=new LinkedHashMap<>();JSONArray patches=release.getJSONArray("patches");List<JSONObject> activePatches=new ArrayList<>();Set<String> processedChunks=new HashSet<>();String baseId=PatchFormat.sha(new File(sourceRoot,"manifest.ssra"));File base=new File(h,"baselines/"+baseId);long required=33554432L;
                 for(int i=0;i<patches.length();i++){
-                    JSONObject p=patches.getJSONObject(i);String file=p.getString("file");PatchFormat.Entry f=manifest.files.get(file);if(f==null)throw new IOException("Thiếu slot JP: "+file);PatchFormat.Chunk c=manifest.chunk(f);
+                    JSONObject p=patches.getJSONObject(i);String file=p.getString("file");
+                    boolean isOptional=!file.equals("text/ja/text.db")&&!file.equals(PatchFormat.STORY);
+                    PatchFormat.Entry f=manifest.files.get(file);
+                    if(f==null){if(isOptional)continue;throw new IOException("Thiếu slot JP: "+file);}
+                    PatchFormat.Chunk c;try{c=manifest.chunk(f);}catch(Exception ex){if(isOptional)continue;throw ex;}
+                    File src=sourceFile(sourceRoot,root,"chunks/"+c.name);
+                    if(isOptional&&(!src.exists()||src.length()!=c.total))continue;
                     String wanted=p.optString("chunk");
                     if(wanted.isEmpty())wanted=(c.name.equals("base_b21_0.ssrc")||c.name.equals("base_b17_0.ssrc"))?c.name:EXPECTED_CHUNKS.get(f.name);
                     if(wanted==null)wanted=c.name;
-                    if(!c.name.equals(wanted)||f.enc!=0||f.comp!=1||f.cs!=p.getInt("source_cs")||f.us!=p.getInt("source_us")||f.hash!=PatchFormat.hexLong(p.getString("source_xxh64")))throw new IOException("Nguồn JP đã đổi; cần bản dịch tương thích mới.");
-                    File src=sourceFile(sourceRoot,root,"chunks/"+c.name);
-                    boolean isOptional=!file.equals("text/ja/text.db")&&!file.equals(PatchFormat.STORY);
-                    if(isOptional&&(!src.exists()||src.length()!=c.total))continue;
-                    manifest.verifyChunkFile(src,c);File payload=payloads.get(p.getString("payload"));long size=p.getLong("target_cs");if(size<1||size>f.cs||payload.length()!=size||!PatchFormat.sha(payload).equals(p.getString("target_sha256")))throw new IOException("Payload sai checksum/kích thước.");
-                    try(RandomAccessFile r=new RandomAccessFile(src,"r")){r.seek(f.offset-c.start);MessageDigest d=MessageDigest.getInstance("SHA-256");byte[] b=new byte[65536];int left=f.cs;while(left>0){int n=r.read(b,0,Math.min(left,b.length));if(n<0)throw new EOFException();d.update(b,0,n);left-=n;}if(!PatchFormat.hex(d.digest()).equals(p.getString("source_sha256")))throw new IOException("Nguồn JP không khớp gói. Chưa ghi thay đổi vào game.");}
+                    if(!c.name.equals(wanted)||f.enc!=0||f.comp!=1||f.cs!=p.getInt("source_cs")||f.us!=p.getInt("source_us")||f.hash!=PatchFormat.hexLong(p.getString("source_xxh64"))){
+                        if(isOptional)continue;
+                        StringBuilder err=new StringBuilder("Nguồn JP đã đổi; cần bản dịch tương thích mới. (").append(file).append(" in ").append(c.name);
+                        if(!c.name.equals(wanted))err.append(", wanted chunk: ").append(wanted);
+                        if(f.enc!=0)err.append(", enc: ").append(f.enc).append("!=0");
+                        if(f.comp!=1)err.append(", comp: ").append(f.comp).append("!=1");
+                        if(f.cs!=p.getInt("source_cs"))err.append(", cs: ").append(f.cs).append("!=").append(p.getInt("source_cs"));
+                        if(f.us!=p.getInt("source_us"))err.append(", us: ").append(f.us).append("!=").append(p.getInt("source_us"));
+                        if(f.hash!=PatchFormat.hexLong(p.getString("source_xxh64")))err.append(", xxh64: ").append(Long.toHexString(f.hash)).append("!=").append(p.getString("source_xxh64"));
+                        err.append(", sourceRoot: ").append(sourceRoot.equals(root)?"live":"baseline").append(")");
+                        throw new IOException(err.toString());
+                    }
+                    if(isOptional){try{manifest.verifyChunkFile(src,c);}catch(Exception ex){continue;}}
+                    else{manifest.verifyChunkFile(src,c);}
+                    File payload=payloads.get(p.getString("payload"));long size=p.getLong("target_cs");if(size<1||size>f.cs||payload.length()!=size||!PatchFormat.sha(payload).equals(p.getString("target_sha256")))throw new IOException("Payload sai checksum/kích thước.");
+                    try(RandomAccessFile r=new RandomAccessFile(src,"r")){r.seek(f.offset-c.start);MessageDigest d=MessageDigest.getInstance("SHA-256");byte[] b=new byte[65536];int left=f.cs;while(left>0){int n=r.read(b,0,Math.min(left,b.length));if(n<0)throw new EOFException();d.update(b,0,n);left-=n;}if(!PatchFormat.hex(d.digest()).equals(p.getString("source_sha256"))){if(isOptional)continue;throw new IOException("Nguồn JP không khớp gói. Chưa ghi thay đổi vào game. ("+file+" in "+c.name+", sha: "+PatchFormat.hex(d.digest()).substring(0,8)+"!="+p.getString("source_sha256").substring(0,8)+", sourceRoot: "+(sourceRoot.equals(root)?"live":"baseline")+")");}}
                     if(processedChunks.add(c.name)){boolean backedUp=new File(base,"chunks/"+c.name).exists();required+=c.total*(backedUp?2:3);}activePatches.add(p);
                 }
                 if(root.getUsableSpace()<required)throw new IOException("Cần khoảng "+(required/1048576+1)+" MB dung lượng trống để sao lưu và cài.");

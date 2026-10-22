@@ -405,7 +405,7 @@ class Installer:
             if not pl_file.is_file():
                 if is_optional:
                     continue
-                raise FileNotFoundError(f'Thiếu payload: {pl_name}')
+                raise FileNotFoundError(f'Thiếu payload: {pl_name}. Vui lòng bấm nút "Cập nhật tiếng Việt" trên launcher để tải lại gói dữ liệu.')
 
             pl_bytes = pl_file.read_bytes()
             if len(pl_bytes) > size:
@@ -570,13 +570,11 @@ class Installer:
         manifest_original_sha = self.state.get('original_hashes', {}).get('manifest.ssra')
         manifest_patched_sha = self.state.get('patched_hashes', {}).get('manifest.ssra')
 
-        # If actual original manifest changed (real Smilegate game update), abort:
-        if manifest_clean_sha != manifest_original_sha:
-            raise RuntimeError('Game đã đổi phiên bản; không tự khôi phục chunk cũ. Hãy kiểm tra tệp bằng STOVE.')
-
-        # Live manifest must either match the previous patched manifest OR the clean original manifest
-        if live_manifest_sha != manifest_patched_sha and live_manifest_sha != manifest_original_sha:
-            raise RuntimeError('Game đã đổi phiên bản; không tự khôi phục chunk cũ. Hãy kiểm tra tệp bằng STOVE.')
+        publisher_updated = (manifest_clean_sha != manifest_original_sha)
+        if not publisher_updated:
+            # Live manifest must either match the previous patched manifest OR the clean original manifest
+            if live_manifest_sha != manifest_patched_sha and live_manifest_sha != manifest_original_sha:
+                raise RuntimeError('Game đã thay đổi ngoài dự kiến; hãy kiểm tra tệp bằng STOVE.')
 
         backup = self._backup_dir()
         chunks = {c['name']: c for c in ar.chunks}
@@ -593,19 +591,24 @@ class Installer:
                 raise RuntimeError('Chunk cũ hoặc bản sao lưu đã thay đổi; chưa ghi dữ liệu game: ' + rel)
 
             target_sha = sha(target)
-            if target_sha == orig_hash:
-                # File is already clean on disk (e.g. STOVE verified and restored it). No restore needed!
+            if target_sha == orig_hash or target_sha != patched_hash:
+                # File is already clean on disk or updated by publisher. No restore needed!
                 continue
             elif target_sha == patched_hash:
-                name = Path(rel).name
-                if name not in chunks:
-                    raise FormatError('Không xác định được tên chunk gốc để khôi phục: ' + name)
-                # Verify original physical identity, not just a matching file size.
-                check = Archive(ar.root, ar.manifest_path, {name: source})
-                check.chunk_bytes(chunks[name])
-                restored[rel] = source
-            else:
-                raise RuntimeError('Chunk cũ hoặc bản sao lưu đã thay đổi; chưa ghi dữ liệu game: ' + rel)
+                if publisher_updated:
+                    if source.is_file() and sha(source) == orig_hash:
+                        restored[rel] = source
+                    else:
+                        raise RuntimeError(f'Game đã đổi phiên bản nhưng {Path(rel).name} vẫn mang dữ liệu bản vá cũ. Hãy kiểm tra tệp bằng STOVE.')
+                else:
+                    name = Path(rel).name
+                    if name not in chunks:
+                        raise FormatError('Không xác định được tên chunk gốc để khôi phục: ' + name)
+                    if not source.is_file() or sha(source) != orig_hash:
+                        raise RuntimeError('Bản sao lưu chunk cũ không khớp dữ liệu gốc: ' + rel)
+                    check = Archive(ar.root, ar.manifest_path, {name: source})
+                    check.chunk_bytes(chunks[name])
+                    restored[rel] = source
         return restored
 
     def _transaction(self, files, new_state, expected_previous=None, expected_sources=None):
