@@ -21,6 +21,7 @@ class CznLanding extends StatelessWidget {
     required this.onSetup,
     required this.onUpdates,
     required this.onHelp,
+    this.onDonate,
     this.onSettings,
     this.onNotice,
     this.onTroubleshoot,
@@ -35,6 +36,7 @@ class CznLanding extends StatelessWidget {
       onSetup,
       onUpdates,
       onHelp,
+      onDonate,
       onSettings,
       onNotice,
       onTroubleshoot;
@@ -125,7 +127,7 @@ class CznLanding extends StatelessWidget {
             : isPc
             ? (!ready ? 'Chưa tìm thấy game' : 'Sẵn sàng')
             : !access
-            ? 'Chưa kết nối Shizuku'
+            ? 'Chưa kết nối Local ADB'
             : !ready
             ? 'Chưa có dữ liệu game'
             : 'Sẵn sàng';
@@ -171,6 +173,7 @@ class CznLanding extends StatelessWidget {
             !isPc &&
             (message.contains('Kết nối') ||
                 message.contains('Shizuku') ||
+                message.contains('Local ADB') ||
                 message.contains('thời gian chờ'));
         final information = busy || checking || showMessage
             ? Padding(
@@ -289,7 +292,14 @@ class CznLanding extends StatelessWidget {
                     children: [
                       information,
                       primary,
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
+                      CznDonateButton(
+                        key: const Key('open-donate'),
+                        onPressed: onDonate,
+                        compact: compact,
+                        width: (bounds.maxWidth * .42) * 0.50,
+                      ),
+                      const SizedBox(height: 4),
                       statusLine,
                     ],
                   ),
@@ -315,7 +325,14 @@ class CznLanding extends StatelessWidget {
                     children: [
                       information,
                       primary,
-                      SizedBox(height: compact ? 6 : 16),
+                      const SizedBox(height: 4),
+                      CznDonateButton(
+                        key: const Key('open-donate'),
+                        onPressed: onDonate,
+                        compact: compact,
+                        width: (bounds.maxWidth - 28) * 0.50,
+                      ),
+                      SizedBox(height: compact ? 4 : 10),
                       Row(
                         children: [
                           for (final utility in utilities)

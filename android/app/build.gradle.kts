@@ -21,7 +21,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "vn.czn.viethoa.community"
+        applicationId = "vn.czn.viethoa.localadb"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 26
@@ -50,9 +50,16 @@ android {
             signingConfig = signingConfigs.findByName("community")
         }
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
+    implementation("com.github.MuntashirAkon:libadb-android:3.1.1")
+    implementation("org.bouncycastle:bcprov-jdk15to18:1.81")
+    implementation("org.conscrypt:conscrypt-android:2.5.3")
     implementation("dev.rikka.shizuku:api:13.1.5")
     implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.lz4:lz4-java:1.8.0")

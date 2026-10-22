@@ -4,6 +4,12 @@ import org.json.JSONObject;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.security.*;
+import java.util.Base64;
+import java.util.zip.*;
+
 public class UpdatePolicyTest {
     private JSONObject channel() throws Exception {
         return new JSONObject().put("app_code",10502).put("app_version","1.5.2")
@@ -56,5 +62,56 @@ public class UpdatePolicyTest {
     @Test public void invalidPatchVersionDoesNotMasqueradeAsUpdate() throws Exception {
         assertThrows(Exception.class, () -> UpdatePolicy.hasPatchUpdate(channel().put("patch_code", 0), 10400));
         assertThrows(Exception.class, () -> UpdatePolicy.hasPatchUpdate(channel().put("patch_code", 2147483648L), 10400));
+    }
+
+    private File createPatchZip(KeyPair keys, int schema, int minPatcher, int versionCode, String version) throws Exception {
+        JSONObject desc = new JSONObject().put("schema", schema).put("min_patcher", minPatcher)
+            .put("version_code", versionCode).put("version", version);
+        byte[] raw = desc.toString().getBytes(StandardCharsets.UTF_8);
+        Signature s = Signature.getInstance("SHA256withRSA");
+        s.initSign(keys.getPrivate());
+        s.update(raw);
+        String envelope = new JSONObject().put("signed", Base64.getEncoder().encodeToString(raw))
+            .put("signature", Base64.getEncoder().encodeToString(s.sign())).toString();
+        File zipFile = File.createTempFile("czn-patch-", ".cznpatch");
+        zipFile.deleteOnExit();
+        try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(zipFile))) {
+            zos.putNextEntry(new ZipEntry("release.json"));
+            zos.write(envelope.getBytes(StandardCharsets.UTF_8));
+            zos.closeEntry();
+        }
+        return zipFile;
+    }
+
+    @Test public void verifyPatchIdentityMatchingSucceeds() throws Exception {
+        KeyPair keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        File patch = createPatchZip(keys, 2, 10700, 10801, "1.8.1");
+        JSONObject ch = channel().put("patch_code", 10801).put("patch_version", "1.8.1");
+        JSONObject release = UpdatePolicy.verifyPatchIdentity(ch, patch, keys.getPublic().getEncoded());
+        assertEquals(10801, release.getInt("version_code"));
+        assertEquals("1.8.1", release.getString("version"));
+    }
+
+    @Test public void verifyPatchIdentityMismatchIsRejected() throws Exception {
+        KeyPair keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        // File is 1.7.0 (10701), but channel claims 1.8.1 (10801)
+        File patch = createPatchZip(keys, 2, 10700, 10701, "1.7.0");
+        JSONObject ch = channel().put("patch_code", 10801).put("patch_version", "1.8.1");
+        try {
+            UpdatePolicy.verifyPatchIdentity(ch, patch, keys.getPublic().getEncoded());
+            fail("Expected PATCH_IDENTITY_MISMATCH exception");
+        } catch (IOException e) {
+            assertTrue(e.getMessage().contains("[PATCH_IDENTITY_MISMATCH]"));
+        }
+    }
+
+    @Test public void verifyPatchIdentitySchemaOrMinPatcherRejected() throws Exception {
+        KeyPair keys = KeyPairGenerator.getInstance("RSA").generateKeyPair();
+        File patchSchema = createPatchZip(keys, 1, 10700, 10801, "1.8.1");
+        JSONObject ch = channel().put("patch_code", 10801).put("patch_version", "1.8.1");
+        assertThrows(IOException.class, () -> UpdatePolicy.verifyPatchIdentity(ch, patchSchema, keys.getPublic().getEncoded()));
+
+        File patchFuture = createPatchZip(keys, 2, PatchEngine.CURRENT_PATCHER_CODE + 1, 10801, "1.8.1");
+        assertThrows(IOException.class, () -> UpdatePolicy.verifyPatchIdentity(ch, patchFuture, keys.getPublic().getEncoded()));
     }
 }

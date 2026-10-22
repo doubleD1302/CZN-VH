@@ -126,23 +126,19 @@ class _CznToolsSetupPageState extends State<CznToolsSetupPage> {
           ],
           _SetupStep(
             number: '01',
-            title: isPc ? 'Thư mục game' : 'Kết nối Shizuku',
+            title: isPc ? 'Thư mục game' : 'Kết nối Local ADB',
             glyph: isPc ? CznToolsGlyph16.folder : CznToolsGlyph16.key,
             helper: isPc
                 ? (_ready ? 'Đã nhận diện thư mục game' : 'Chưa tìm thấy game')
                 : (_access
                       ? 'Đã kết nối'
-                      : widget.status['shizukuRunning'] == true
-                      ? 'Chưa cấp quyền'
                       : 'Chưa kết nối'),
             done: isPc ? _ready : _access,
             actionLabel: isPc
                 ? 'Chọn thư mục'
                 : (_access
-                      ? 'Mở Shizuku'
-                      : widget.status['shizukuRunning'] == true
-                      ? 'Cấp quyền'
-                      : 'Mở Shizuku'),
+                      ? 'Đã kết nối'
+                      : 'Kết nối Local ADB'),
             onPressed: isPc
                 ? () async {
                     await NativeBridge.action('chooseGameDir');
@@ -478,7 +474,7 @@ class _SetupProgress extends StatelessWidget {
     final completed = [access, ready, installed];
     final labels = isPc
         ? const ['Thư mục game', 'Dữ liệu CZN', 'Tiếng Việt']
-        : const ['Shizuku', 'Dữ liệu game', 'Bản dịch'];
+        : const ['Local ADB', 'Dữ liệu game', 'Bản dịch'];
     return Column(
       children: [
         Row(

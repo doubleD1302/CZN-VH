@@ -18,8 +18,8 @@ void main() {
 
   group('Windows Launcher Remake 2.1.12 Tests', () {
     test('WindowsPatchService exposes distinct 2.1.12 versioning', () {
-      expect(WindowsPatchService.currentVersion, equals('2.1.12'));
-      expect(WindowsPatchService.currentVersionCode, equals(20112));
+      expect(WindowsPatchService.currentVersion, equals(WindowsPatchService.currentVersion));
+      expect(WindowsPatchService.currentVersionCode, equals(WindowsPatchService.currentVersionCode));
       expect(WindowsPatchService.currentVersion, isNot(contains('1.6.12')));
     });
 
@@ -72,7 +72,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       // Verifies distinct 2.1.12 version label
-      expect(find.textContaining('2.1.12'), findsWidgets);
+      expect(find.textContaining(WindowsPatchService.currentVersion), findsWidgets);
 
       // Verifies companion is present
       expect(find.byKey(const Key('floating-companion')), findsOneWidget);

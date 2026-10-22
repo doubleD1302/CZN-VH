@@ -44,6 +44,13 @@ class _CompanionDialogState extends State<CompanionDialog> {
     showDialog<void>(context: context, builder: (_) => const BugReportDialog());
   }
 
+  void _openChunkReport() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => const BugReportDialog(isChunkMode: true),
+    );
+  }
+
   void _openHallOfFame() {
     showDialog<void>(
       context: context,
@@ -233,6 +240,26 @@ class _CompanionDialogState extends State<CompanionDialog> {
                       ),
                       const SizedBox(height: 8),
                     ],
+                    ElevatedButton.icon(
+                      onPressed: _openChunkReport,
+                      icon: const Icon(
+                        Icons.translate_rounded,
+                        size: 20,
+                      ),
+                      label: const Text(
+                        'Báo Cho Nhóm Dịch (Chunk Chưa Dịch)',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8A2E3B),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
                     ElevatedButton.icon(
                       onPressed: _openBugReport,
                       icon: const Icon(

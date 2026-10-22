@@ -18,8 +18,9 @@ import 'czn_tools_workflow.dart';
 import 'czn_tools_backdrop.dart';
 import 'czn_companion.dart';
 import 'czn_landing.dart';
+import 'donate_screen.dart';
 import 'companion_dialog.dart';
-import 'shizuku_troubleshoot_dialog.dart';
+import 'local_adb_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -438,29 +439,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _showShizukuTroubleshoot() {
-    ShizukuTroubleshootDialog.show(context, onCopyReport: _copyReport);
+    LocalAdbDialog.show(
+      context,
+      onConnected: () {
+        _refresh();
+      },
+    );
   }
 
   Future<void> _access() async {
-    try {
-      if (_status['shizukuRunning'] != true) {
-        final opened = await NativeBridge.action('openShizuku');
-        if (!opened) {
-          await launchUrl(
-            Uri.parse('https://shizuku.rikka.app/download/'),
-            mode: LaunchMode.externalApplication,
-          );
-        }
-        return;
-      }
-      await NativeBridge.action('requestAccess');
-      if (_status['autoDownload'] != false) {
-        await NativeBridge.action('requestNotifications');
-      }
-      await _refresh();
-    } catch (e) {
-      if (mounted) setState(() => _message = _error(e));
-    }
+    LocalAdbDialog.show(
+      context,
+      onConnected: () {
+        _refresh();
+      },
+    );
   }
 
   Future<void> _run(
@@ -630,10 +623,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           setState(() => _downloading = false);
           return await NativeBridge.map('installPatch', {'path': path});
         } catch (e) {
-          if (_isPc) {
-            setState(() => _downloading = false);
-            return NativeBridge.map('installBundled');
-          }
+          setState(() => _downloading = false);
+          // Keep the verified online target. An old bundled patch can require
+          // different JP data and must not mask a download/install failure.
           rethrow;
         }
       }
@@ -653,8 +645,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (picked.isEmpty || picked.first.path == null || !mounted) return;
     await _run(() async {
       final source = File(picked.first.path!);
-      if (await source.length() > 33554432) {
-        throw Exception('Gói vượt 32 MB. Gói cũ 210 MB không còn được hỗ trợ.');
+      if (await source.length() > 67108864) {
+        throw Exception('Gói vượt 64 MB. Gói cũ 210 MB không còn được hỗ trợ.');
       }
       final cache = await getApplicationSupportDirectory();
       final temp = File('${cache.path}/local.cznpatch');
@@ -1041,6 +1033,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           onSetup: _busy ? null : () => _openTools(0),
           onUpdates: _busy ? null : () => _openTools(1),
           onHelp: _showToolsHelp,
+          onDonate: _busy || _checking
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const DonateScreen()),
+                ),
           onSettings: _busy || _checking ? null : _settings,
           onNotice: _busy ? null : () => _maybeNotice(force: true),
         ),
@@ -1216,7 +1213,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       CznToolsTab.settings => CznToolsSettingsPage(
         companionVisible: _showCompanion,
         autoDownload: _status['autoDownload'] != false,
-        channel: _status['channel'] as String? ?? 'https://github.com/doubleD1302/CZN-VH/releases/latest/download/channel.json',
+        channel: _status['channel'] as String? ?? 'https://github.com/doubleD1302/CZN-VH/releases/latest/download/localadb-channel.json',
         appVersion: appVersion,
         patchVersion: patchVersion,
         busy: _busy,

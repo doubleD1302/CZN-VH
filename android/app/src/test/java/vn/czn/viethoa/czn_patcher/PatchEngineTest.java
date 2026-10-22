@@ -171,6 +171,100 @@ public class PatchEngineTest {
         assertEquals(6,engine().restore(optRoot,(stg,n)->{}).getInt("restored_count"));
     }
 
+    @Test public void patchWithMinPatcher10700Succeeds()throws Exception{
+        File r=Files.createTempDirectory("czn-minpatcher-pass-").toFile();
+        String text="text/ja/text.db",story=PatchFormat.STORY;
+        byte[] st=utf(text+"\0"+story+"\0");
+        int so=264,gp=so+st.length,names=gp+64,fh=names+13;
+        ByteBuffer b=ByteBuffer.allocate(fh+32).order(ByteOrder.LITTLE_ENDIAN);
+        b.put(utf("SSRA")).putInt(4).putInt(88).putInt(2).putInt(2).putInt(0).putLong(so).putLong(st.length).putLong(88).putLong(184).putLong(0);
+        b.position(so);b.put(st);
+        b.position(gp);b.put(utf("GRPS")).putInt(2).putInt(13).putInt(0);
+        b.putShort(gp+16,(short)0);b.putInt(gp+20,0);b.putShort(gp+40,(short)12);b.putInt(gp+44,8);
+        putString(b,names,"lang_ja");putString(b,names+8,"base");
+        b.position(fh);b.put(utf("FHSH")).putInt(2).putInt(1).putInt(0);
+        Map<String,byte[]> payloads=new HashMap<>();JSONArray patches=new JSONArray();
+        String[] files=new String[]{text,story};String[] chunks=new String[]{"lang_ja_b01_0.ssrc","base_b21_0.ssrc"};int[] cids=new int[]{1,21};int[] gids=new int[]{0,12};String[] payloadNames=new String[]{"payload/text.zst","payload/story.zst"};
+        int stOffset=0;
+        for(int i=0;i<2;i++){
+            byte[] src=utf("0123456789abcdef0123456789abcdef");byte[] slot=Arrays.copyOfRange(src,8,24);long h=PatchFormat.xx(src);
+            ByteBuffer whole=ByteBuffer.allocate(48).order(ByteOrder.LITTLE_ENDIAN);whole.put(src).put(utf("SSRC")).putInt(cids[i]).putLong(h);
+            PatchFormat.write(PatchFormat.safe(r,"chunks/"+chunks[i]),whole.array());
+            int c=88+i*32;b.putInt(c,cids[i]).putShort(c+4,(short)gids[i]).putLong(c+8,32).putLong(c+16,48).putLong(c+24,h);
+            int f=184+i*40;long offset=8;b.putLong(f+8,offset).putInt(f+16,16).putInt(f+20,24).putInt(f+28,stOffset).put(f+32,(byte)1).putShort(f+34,(short)gids[i]);
+            stOffset+=files[i].length()+1;b.putLong(fh+16+i*8,123+i);
+            byte[] data=utf("VIET_"+i);payloads.put(payloadNames[i],data);
+            patches.put(new JSONObject().put("file",files[i]).put("payload",payloadNames[i]).put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slot))).put("source_xxh64",Long.toHexString(123+i)).put("target_cs",data.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data))).put("target_xxh64","abcd"));
+        }
+        PatchFormat.write(new File(r,"manifest.ssra"),b.array());PatchFormat.write(new File(r,"manifest.ssra.prev"),b.array());PatchFormat.write(new File(r,"manifest.ssra.etag"),utf("https://cdn.example/android\r\nserver-etag\r\n123\r\n321\r\n"));
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10700).put("version_code",10701).put("version","1.7.0").put("patches",patches);
+        byte[] raw=utf(desc.toString());Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            for(Map.Entry<String,byte[]> e:payloads.entrySet()){z.putNextEntry(new ZipEntry(e.getKey()));z.write(e.getValue());z.closeEntry();}
+        }
+        JSONObject res=engine().apply(r,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+        assertTrue(res.getBoolean("success"));
+        assertEquals("1.7.0",res.getString("version"));
+    }
+
+    @Test public void patchWithFutureMinPatcherIsRejected()throws Exception{
+        File r=Files.createTempDirectory("czn-minpatcher-fail-").toFile();
+        JSONArray patches=new JSONArray();
+        patches.put(new JSONObject().put("file","text/ja/text.db").put("payload","payload/text.zst").put("source_cs",16).put("source_us",24).put("source_sha256","abc").put("source_xxh64","123").put("target_cs",5).put("target_us",25).put("target_sha256","def").put("target_xxh64","abcd"));
+        patches.put(new JSONObject().put("file",PatchFormat.STORY).put("payload","payload/story.zst").put("source_cs",16).put("source_us",24).put("source_sha256","abc").put("source_xxh64","124").put("target_cs",5).put("target_us",25).put("target_sha256","def").put("target_xxh64","abcd"));
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",PatchEngine.CURRENT_PATCHER_CODE+1).put("version_code",10701).put("version","1.7.0").put("patches",patches);
+        byte[] raw=utf(desc.toString());Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/text.zst"));z.write(utf("test"));z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/story.zst"));z.write(utf("test"));z.closeEntry();
+        }
+        try{
+            engine().apply(r,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+            fail("Expected exception for future min_patcher");
+        }catch(IOException e){
+            assertTrue(e.getMessage().contains("Gói cần phiên bản ứng dụng mới hơn."));
+        }
+    }
+
+    @Test public void diskSpaceDeduplicationAndBaselineMultiplierAreVerified()throws Exception{
+        JSONObject firstResult=engine().apply(root,new ByteArrayInputStream(zip),(s,n)->{});
+        assertTrue(firstResult.getBoolean("success"));
+        JSONObject state=new JSONObject(new String(PatchFormat.bytes(new File(root,".czn_viethoa/state.json"),262144),StandardCharsets.UTF_8));
+        File base=new File(root,".czn_viethoa/baselines/"+state.getString("baseline")+"/chunks/base_b21_0.ssrc");
+        assertTrue("Baseline backup phải tồn tại sau lần cài đầu",base.exists());
+        
+        // Tạo gói v1.4.1 kế thừa cùng baseline để kiểm tra hệ số 2x khi baseline đã tồn tại
+        JSONObject desc=new JSONObject().put("schema",2).put("min_patcher",10400).put("version_code",10401).put("version","1.4.1");
+        JSONArray patches=new JSONArray();
+        byte[] srcText=PatchFormat.bytes(new File(root,".czn_viethoa/baselines/"+state.getString("baseline")+"/chunks/lang_ja_b01_0.ssrc"),1024);
+        byte[] srcStory=PatchFormat.bytes(base,1024);
+        byte[] slotText=Arrays.copyOfRange(srcText,8,24);
+        byte[] slotStory=Arrays.copyOfRange(srcStory,8,24);
+        byte[] data0=utf("VIET_UPDATED_0"),data1=utf("VIET_UPDATED_1");
+        patches.put(new JSONObject().put("file","text/ja/text.db").put("payload","payload/text.zst").put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slotText))).put("source_xxh64",Long.toHexString(123)).put("target_cs",data0.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data0))).put("target_xxh64","abcd"));
+        patches.put(new JSONObject().put("file",PatchFormat.STORY).put("payload","payload/story.zst").put("source_cs",16).put("source_us",24).put("source_sha256",PatchFormat.sha(new ByteArrayInputStream(slotStory))).put("source_xxh64",Long.toHexString(124)).put("target_cs",data1.length).put("target_us",25).put("target_sha256",PatchFormat.sha(new ByteArrayInputStream(data1))).put("target_xxh64","abcd"));
+        desc.put("patches",patches);
+        byte[] raw=utf(desc.toString());Signature s=Signature.getInstance("SHA256withRSA");s.initSign(keys.getPrivate());s.update(raw);
+        String envelope=new JSONObject().put("signed",Base64.getEncoder().encodeToString(raw)).put("signature",Base64.getEncoder().encodeToString(s.sign())).toString();
+        ByteArrayOutputStream out=new ByteArrayOutputStream();
+        try(ZipOutputStream z=new ZipOutputStream(out)){
+            z.putNextEntry(new ZipEntry("release.json"));z.write(utf(envelope));z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/text.zst"));z.write(data0);z.closeEntry();
+            z.putNextEntry(new ZipEntry("payload/story.zst"));z.write(data1);z.closeEntry();
+        }
+        JSONObject updateResult=engine().apply(root,new ByteArrayInputStream(out.toByteArray()),(stg,n)->{});
+        assertTrue(updateResult.getBoolean("success"));
+        assertEquals("1.4.1",updateResult.getString("version"));
+        assertEquals(5,engine().restore(root,(stg,n)->{}).getInt("restored_count"));
+        assertEquals(original,hashes());
+    }
+
     @Test public void realNativeReadbackFixture()throws Exception{
         String baseline=System.getenv("CZN_TEST_BASELINE"),bundle=System.getenv("CZN_TEST_BUNDLE"),output=System.getenv("CZN_TEST_OUTPUT");Assume.assumeNotNull(baseline,bundle,output);File testRoot=new File(output);assertFalse("Do not overwrite previous evidence",testRoot.exists());testRoot.mkdirs();for(String rel:PatchFormat.ALLOWED){File f=new File(baseline,rel);if(f.exists()){File t=PatchFormat.safe(testRoot,rel);t.getParentFile().mkdirs();Files.copy(f.toPath(),t.toPath());}}PatchEngine real=new PatchEngine(Base64.getDecoder().decode(BuildTrust.PUBLIC_KEY));try(InputStream in=new FileInputStream(bundle)){assertTrue(real.apply(testRoot,in,(s,n)->{}).getBoolean("success"));}System.out.println("Native verification output: "+testRoot);
     }

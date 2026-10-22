@@ -46,4 +46,41 @@ class NativeBridge {
 
   static Future<bool> checkCompanionLaunchIntent() async =>
       await channel.invokeMethod<bool>('checkCompanionLaunchIntent') ?? false;
+
+  static Future<String?> getWifiIp() async =>
+      await channel.invokeMethod<String>('getWifiIp');
+
+  static Future<bool> isLocalAdbConnected() async =>
+      await channel.invokeMethod<bool>('isLocalAdbConnected') ?? false;
+
+  static Future<bool> pairLocalAdb(
+    int port,
+    String code, {
+    String? host,
+  }) async =>
+      await channel.invokeMethod<bool>('pairLocalAdb', {
+        'host': host,
+        'port': port,
+        'code': code,
+      }) ??
+      false;
+
+  static Future<bool> connectLocalAdb(
+    int port, {
+    String? host,
+  }) async =>
+      await channel.invokeMethod<bool>('connectLocalAdb', {
+        'host': host,
+        'port': port,
+      }) ??
+      false;
+
+  static Future<bool> openDevSettings() async =>
+      await channel.invokeMethod<bool>('openDevSettings') ?? false;
+
+  static Future<bool> startNotificationPairing() async =>
+      await channel.invokeMethod<bool>('startNotificationPairing') ?? false;
+
+  static Future<bool> stopNotificationPairing() async =>
+      await channel.invokeMethod<bool>('stopNotificationPairing') ?? false;
 }
