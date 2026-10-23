@@ -438,6 +438,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         lower.contains('thời gian chờ');
   }
 
+  bool _isBackupOrSourceMismatch(String msg) {
+    final lower = msg.toLowerCase();
+    return lower.contains('không khớp nguồn') ||
+        lower.contains('backup') ||
+        lower.contains('không nhất quán') ||
+        lower.contains('còn giữ chunk');
+  }
+
+  Future<void> _cleanAndRetry() async {
+    if (_busy) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Đang tự phục hồi bản sao lưu và cài đặt lại...'),
+        duration: Duration(seconds: 3),
+      ),
+    );
+    await _install();
+  }
+
   void _showShizukuTroubleshoot() {
     LocalAdbDialog.show(
       context,
@@ -568,6 +587,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           content: SingleChildScrollView(child: Text(_message)),
           actions: [
+            if (!success && _isBackupOrSourceMismatch(_message))
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF58A6FF),
+                  foregroundColor: const Color(0xFF0D1117),
+                ),
+                icon: const Icon(Icons.cleaning_services_rounded, size: 16),
+                label: const Text('Dọn dẹp & Thử lại'),
+                onPressed: () {
+                  Navigator.pop(c);
+                  unawaited(_cleanAndRetry());
+                },
+              ),
             if (!success && !_isPc && _isConnectionOrShizukuError(_message))
               FilledButton.icon(
                 style: FilledButton.styleFrom(

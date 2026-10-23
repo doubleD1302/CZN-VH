@@ -47,4 +47,25 @@ void main() {
 
     expect(find.text("bấm vào đây"), findsOneWidget);
   });
+  testWidgets("Notice page renders formatted text (bold, italic, strike) without raw asterisks", (tester) async {
+    const notice = CommunityNotice(
+      "test-id-format",
+      "Tiêu đề Format",
+      "Cảm ơn **Icarus** đã ủng hộ! Đây là *italic* và ~~strike~~ và [Link](https://github.com)",
+    );
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: CznToolsNoticePage(
+          notice: notice,
+          appVersion: "1.8.1",
+          busy: false,
+          onDismiss: (_) {},
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining("**Icarus**"), findsNothing);
+    expect(find.text("Link"), findsOneWidget);
+  });
 }

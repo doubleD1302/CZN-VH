@@ -795,6 +795,54 @@ class _NoticeBodyText extends StatelessWidget {
   final String text;
   final TextStyle style;
 
+  List<InlineSpan> _parseFormattedSpan(String rawText, TextStyle baseStyle) {
+    final formatRegex = RegExp(r'(\*\*(.+?)\*\*)|(__(.+?)__)|(~~(.+?)~~)|(\*(.+?)\*)|(_([^_]+?)_)');
+    final result = <InlineSpan>[];
+    int start = 0;
+
+    for (final m in formatRegex.allMatches(rawText)) {
+      if (m.start > start) {
+        result.add(TextSpan(text: rawText.substring(start, m.start), style: baseStyle));
+      }
+
+      if (m.group(2) != null) {
+        result.add(TextSpan(
+          text: m.group(2)!,
+          style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        ));
+      } else if (m.group(4) != null) {
+        result.add(TextSpan(
+          text: m.group(4)!,
+          style: baseStyle.copyWith(fontWeight: FontWeight.bold),
+        ));
+      } else if (m.group(6) != null) {
+        result.add(TextSpan(
+          text: m.group(6)!,
+          style: baseStyle.copyWith(
+            decoration: TextDecoration.lineThrough,
+            decorationColor: baseStyle.color,
+          ),
+        ));
+      } else if (m.group(8) != null) {
+        result.add(TextSpan(
+          text: m.group(8)!,
+          style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        ));
+      } else if (m.group(10) != null) {
+        result.add(TextSpan(
+          text: m.group(10)!,
+          style: baseStyle.copyWith(fontStyle: FontStyle.italic),
+        ));
+      }
+      start = m.end;
+    }
+
+    if (start < rawText.length) {
+      result.add(TextSpan(text: rawText.substring(start), style: baseStyle));
+    }
+    return result;
+  }
+
   @override
   Widget build(BuildContext context) {
     final regex = RegExp(
@@ -806,7 +854,7 @@ class _NoticeBodyText extends StatelessWidget {
 
     for (final match in regex.allMatches(text)) {
       if (match.start > lastIndex) {
-        spans.add(TextSpan(text: text.substring(lastIndex, match.start)));
+        spans.addAll(_parseFormattedSpan(text.substring(lastIndex, match.start), style));
       }
 
       String label;
@@ -853,7 +901,7 @@ class _NoticeBodyText extends StatelessWidget {
     }
 
     if (lastIndex < text.length) {
-      spans.add(TextSpan(text: text.substring(lastIndex)));
+      spans.addAll(_parseFormattedSpan(text.substring(lastIndex), style));
     }
 
     return Text.rich(
